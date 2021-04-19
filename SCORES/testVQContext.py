@@ -357,6 +357,7 @@ def oneIterMerge(model, testdata):
         vq = decode_Vq_loss(model, tree).data.item()
         vqSum = vqSum + vq
     vqLoss = vqSum/len(patches)
+    print(vqLoss)
     if vqLoss < vqBefore:
         for tree in patches:
             updateTreeInfo(tree)
@@ -371,8 +372,8 @@ def iterateKMergeTest(model, testdata):
     inputBox = [render_node_to_boxes(testdata.leves)]
     for i in range(16):
         boxes= oneIterMerge(model, testdata)
-        if i % 5 == 0:
-            box_all = render_node_to_boxes(boxes)
-            inputBox.append(box_all)
+        #if i % 5 == 0:
+        box_all = render_node_to_boxes(boxes)
+        inputBox.append(box_all)
 
     return inputBox
