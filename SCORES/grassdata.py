@@ -92,10 +92,10 @@ def rotate_boxes(boxes, syms):
         # re-compute principal directions
         dir_1 = new_boxes[k,6:9]
         dir_2 = new_boxes[k,9:]
-        dir_1 = dir_1/LA.norm(dir_1)
-        dir_2 = dir_2/LA.norm(dir_2)
+        dir_1 = dir_1/np.linalg.norm(dir_1)
+        dir_2 = dir_2/np.linalg.norm(dir_2)
         dir_3 = np.cross(dir_1, dir_2)
-        dir_3 = dir_3/LA.norm(dir_3)
+        dir_3 = dir_3/np.linalg.norm(dir_3)
         
         # realign axes
         x_dir, x_len = bestDir([dir_1, dir_2, dir_3], boxes[k,3:6], 0)
