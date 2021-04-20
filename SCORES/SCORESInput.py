@@ -585,8 +585,10 @@ def rotate_boxes_old(boxes, syms):
 
 
 # load data from database
-dir_syms = '../../partNet_syms/Chair'
-dir_obj = '../../partNet_objs'
+#dir_syms = '../../partNet_syms/Chair'
+#dir_obj = '../../partNet_objs'
+dir_syms = 'data/Chair'
+dir_obj = 'data/PartNet_Chairs/Chair_parts'
 grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 
 # # Select the chair number that we want for first chair
@@ -672,7 +674,7 @@ print('Input Boxes:')
 draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
 
 
-mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
+mergeNetFix = torch.load('SCORES/MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
 allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
