@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree
+from grassdata import GRASSDataset, Tree, rotate_box_list_back
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -676,9 +676,10 @@ mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda stor
 mergeNetFix = mergeNetFix.cpu()
 
 allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
-print(len(allBoxes), 'output boxes:')
-for boxes in allBoxes:
-    draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
+print(len(allBoxes), 'output box lists:')
+for boxes in allBoxes[-1:]:
+    unrotated_boxes = rotate_box_list_back(boxes)
+    draw3dOBB.showGenshape(torch.cat(unrotated_boxes, 0).numpy())
 
 # %%
 
