@@ -19,6 +19,89 @@ import math
 
 ## Some function definitions for box decoding
 
+def renderBoxes2mesh(boxes, gtboxs, obj_names):
+    results = []
+    for box_i in range(len(boxes)):
+        vertices = []
+        faces = []
+        obj_name = obj_names[box_i]
+        v_num = 0
+        for name in obj_name:
+            with open(os.path.join('../../partNet_objs/', name), 'r') as f:
+                lines = f.readlines()
+            t = 0
+            for line in lines:
+                if line[0] != 'v' and line[0] != 'f':
+                    continue
+                line = line.strip('\n')
+                items = line.split(' ')
+                if items[0] == 'v':
+                    vertices.append((float(items[1]), float(items[2]), float(items[3])))
+                    t += 1
+                if items[0] == 'f':
+                    faces.append([int(items[1])+v_num, int(items[2])+v_num, int(items[3])+v_num])
+            v_num += t
+        if False:
+            results.append((vertices, faces))
+        else:
+            gtbox = gtboxs[box_i].cpu().numpy().squeeze()
+            gtCenter = gtbox[0:3][np.newaxis, ...].T
+            gtlengths = gtbox[3:6]
+            gtdir_1 = gtbox[6:9]
+            gtdir_2 = gtbox[9:12]
+            gtdir_1 = gtdir_1/LA.norm(gtdir_1)
+            gtdir_2 = gtdir_2/LA.norm(gtdir_2)
+            gtdir_3 = np.cross(gtdir_1, gtdir_2)
+
+            predbox = boxes[box_i].cpu().numpy().squeeze()
+            predCenter = predbox[0:3][np.newaxis, ...].T
+            predlengths = predbox[3:6]
+            preddir_1 = predbox[6:9]
+            preddir_2 = predbox[9:12]
+            preddir_1 = preddir_1/LA.norm(preddir_1)
+            preddir_2 = preddir_2/LA.norm(preddir_2)
+            preddir_3 = -np.cross(preddir_1, preddir_2)
+
+            print(box_i, gtdir_3, preddir_3)
+
+            scale = predlengths / gtlengths
+            scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
+            x = np.array(vertices).T
+            A = np.array([gtdir_1, gtdir_2, gtdir_3])
+            B = np.array([preddir_1, preddir_2, preddir_3])
+            B = B.T
+            y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
+            x = y.T
+            vertices = []
+            for i in range(x.shape[0]):
+                vertices.append(x[i])
+            for i in range(len(faces)):
+                temp = faces[i][0]
+                faces[i][0] = faces[i][1]
+                faces[i][1] = temp
+            results.append((vertices, faces))
+
+    return results
+
+
+def saveOBJ(obj_names, outfilename, results):
+    cmap = plt.get_cmap('jet_r')
+    f = open(outfilename, 'w')
+    offset = 0
+    for box_i in range(len(results)):
+        color = [0.5, 0.5, 1, 1]#cmap(box_i / len(results))[:-1]
+        vertices = results[box_i][0]
+        faces = results[box_i][1]
+        for i in range(len(vertices)):
+            f.write('v ' + str(vertices[i][0]) + ' ' + str(vertices[i][1]) + ' ' + str(vertices[i][2]) +
+                    ' ' + str(color[0]) + ' ' + str(color[1]) + ' ' + str(color[2]) + ' ' + str(color[3]) + '\n')
+        for i in range(len(faces)):
+            f.write('f ' + str(faces[i][0]+offset) + ' ' + str(faces[i][1]+offset) + ' ' + str(faces[i][2]+offset) + '\n')
+        offset += len(vertices)
+    f.close()
+
+
+
 def tryPlot():
     cmap = plt.get_cmap('jet_r')
     fig = plt.figure()
@@ -156,10 +239,8 @@ def decode_boxes(root):
     labels = []
     syms_out = []
     objs = []
-
     while len(stack) > 0:
         node = stack.pop()
-
         node_type = torch.LongTensor([node.node_type.value]).item()
         if node_type == 1:  # ADJ
             # left, right = model.adjDecoder(f)
@@ -177,90 +258,12 @@ def decode_boxes(root):
             # print(node.sym.squeeze(0))
         if node_type == 0:  # BOX
             reBox = node.box
-            reBoxes = [reBox]
-            reLabels = [node.label]
-            reObj = [node.objname]
             s = syms.pop()
+            boxes.append(reBox)
             syms_out.append(s)
-            l1 = abs(s[0] + 1)
-            l2 = abs(s[0])
-            l3 = abs(s[0] - 1)
-            if l1 < 0.15:
-                sList = torch.split(s, 1, 0)
-                bList = torch.split(reBox.data.squeeze(0), 1, 0)
-                f1 = torch.cat([sList[1], sList[2], sList[3]])
-                f1 = f1 / torch.norm(f1)
-                f2 = torch.cat([sList[4], sList[5], sList[6]])
-                folds = round(1 / s[7].item())
-
-                for i in range(folds - 1):
-                    rotvector = torch.cat([f1, sList[7].mul(2 * 3.1415).mul(i + 1)])
-                    rotm = vrrotvec2mat(rotvector)
-                    center = torch.cat([bList[0], bList[1], bList[2]])
-                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
-                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
-                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
-                    newcenter = rotm.matmul(center.add(-f2)).add(f2)
-                    newdir1 = rotm.matmul(dir1)
-                    newdir2 = rotm.matmul(dir2)
-                    newbox = torch.cat([newcenter, dir0, newdir1, newdir2])
-                    reBoxes.append(newbox.unsqueeze(0))
-                    reLabels.append(node.label)
-                    reObj.append(node.objname)
-                    syms_out.append(s)
-            if l3 < 0.15:
-                sList = torch.split(s, 1, 0)
-                bList = torch.split(reBox.data.squeeze(0), 1, 0)
-                trans = torch.cat([sList[1], sList[2], sList[3]])
-                trans_end = torch.cat([sList[4], sList[5], sList[6]])
-                center = torch.cat([bList[0], bList[1], bList[2]])
-                trans_length = math.sqrt(torch.sum(trans ** 2))
-                trans_total = math.sqrt(torch.sum(trans_end.add(-center) ** 2))
-                folds = round(trans_total / trans_length)
-
-                for i in range(folds):
-                    center = torch.cat([bList[0], bList[1], bList[2]])
-                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
-                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
-                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
-                    newcenter = center.add(trans.mul(i + 1))
-                    newbox = torch.cat([newcenter, dir0, dir1, dir2])
-                    reBoxes.append(newbox.unsqueeze(0))
-                    reLabels.append(node.label)
-                    reObj.append(node.objname)
-                    syms_out.append(s)
-            if l2 < 0.15:
-                sList = torch.split(s, 1, 0)
-                bList = torch.split(reBox.data.squeeze(0), 1, 0)
-                ref_normal = torch.cat([sList[1], sList[2], sList[3]])
-                ref_normal = ref_normal / torch.norm(ref_normal)
-                ref_point = torch.cat([sList[4], sList[5], sList[6]])
-                center = torch.cat([bList[0], bList[1], bList[2]])
-                dir0 = torch.cat([bList[3], bList[4], bList[5]])
-                dir1 = torch.cat([bList[6], bList[7], bList[8]])
-                dir2 = torch.cat([bList[9], bList[10], bList[11]])
-                if ref_normal.matmul(ref_point.add(-center)) < 0:
-                    ref_normal = -ref_normal
-                newcenter = ref_normal.mul(2 * abs(torch.sum(ref_point.add(-center).mul(ref_normal)))).add(center)
-                if ref_normal.matmul(dir1) < 0:
-                    ref_normal = -ref_normal
-                dir1 = dir1.add(ref_normal.mul(-2 * ref_normal.matmul(dir1)))
-                if ref_normal.matmul(dir2) < 0:
-                    ref_normal = -ref_normal
-                dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
-                newbox = torch.cat([newcenter, dir0, dir1, dir2])
-                reBoxes.append(newbox.unsqueeze(0))
-                reLabels.append(node.label)
-                reObj.append(node.objname)
-                syms_out.append(s)
-
-            boxes.extend(reBoxes)
-            labels.extend(reLabels)
-            objs.extend(reObj)
-            # print(len(boxes))
-            # print(len(labels))
-            # print(len(objs))
-            # print(len(syms_out))
+            # print(node.label.item())
+            labels.append(node.label)
+            objs.append(node.objname)
     return boxes, syms_out, labels, objs
 
 
@@ -507,7 +510,7 @@ def saveMats(boxes, syms, directory, suffix):
     # idx
     mat = torch.zeros([30, 1])
     for k in range(len(boxes)):
-        mat[k] = np.random.randint(20)
+        mat[k] = k
     key = 'idx' + suffix
     savemat(directory + '/' + key + '.mat', {key: mat.numpy()})
 
@@ -718,11 +721,11 @@ grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 new_tree1 = grassdataset[1]
 new_tree2 = grassdataset[7]
 
-allnewboxes,_ = decode_structure_with_labels(new_tree1.root)
+allnewboxes = decode_structure(new_tree1.root)
 showGenshape(allnewboxes)
 boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 
-allnewboxes,_ = decode_structure_with_labels(new_tree2.root)
+allnewboxes = decode_structure(new_tree2.root)
 showGenshape(allnewboxes)
 boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
 
@@ -750,26 +753,41 @@ showGenshape(boxes_B)
 saveMats(boxes_A, syms_A, 'test_one_shape', 'A')
 saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
 
+
+
 # %%
 # Run scores on the new data
 allTestData = SCORESTest('test_one_shape')
 testFile = allTestData[0]
 originalNodes = testFile.leves
-boxes = testVQContext.render_node_to_boxes(originalNodes)
+input_boxes,idxs = testVQContext.render_node_to_boxes(originalNodes)
 
 print('Input Boxes:')
-draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
+draw3dOBB.showGenshape(torch.cat(input_boxes, 0).numpy())
 
 
 mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
-allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+allBoxes,idxs = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+allObjs = []
+for index in idxs:
+    index = int(index.item())
+    if index >= 10000:
+        allObjs.append(objs_B[index-10000])
+    else:
+        allObjs.append(objs_A[index])
 
-print(len(allBoxes), 'output boxes:')
-for boxes in allBoxes:
-    draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
+mesh = renderBoxes2mesh(input_boxes,input_boxes,allObjs)
+saveOBJ(allObjs, 'testObj.OBJ', mesh)
 
 # %%
+#
+# print(len(allBoxes), 'output boxes:')
+# for boxes in allBoxes:
+#     draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
+
+
+
 
 

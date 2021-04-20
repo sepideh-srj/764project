@@ -7,12 +7,12 @@ import testVQContext
 def class_collate(batch):
     return batch
 
-mergeNet = torch.load('MergeNet_chair_demo_gen.pkl', map_location=torch.device('cpu'))
+mergeNet = torch.load('MergeNet_chair_demo_gen.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNet.cpu()
 
 print(mergeNet)
 
-mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=torch.device('cpu'))
+mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
 allTestData = SCORESTest('test')

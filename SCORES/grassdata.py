@@ -213,8 +213,8 @@ class GRASSDataset(data.Dataset,):
                     box_objs.append(shapeId+'/objs/'+originalobjsloc[index-1]+'.obj')
                 objnames.append(box_objs)
 
-            new_boxes1, new_syms1 = rotate_boxes(boxes, syms)
-            tree = Tree(new_boxes1, ops, new_syms1, labels, objnames)
+            # new_boxes1, new_syms1 = rotate_boxes(boxes, syms)
+            tree = Tree(boxes, ops, syms, labels, objnames)
 
             self.trees.append(tree)
             self.Ids.append(shapeId)
