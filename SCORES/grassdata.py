@@ -125,47 +125,44 @@ def rotate_boxes(boxes, syms):
         new_syms[k,7] = syms[k,7]
     return new_boxes, new_syms
 
-# reverse box rotation (input list of box tensors, unlike above function)
-def rotate_box_list_back(boxes):   
-    new_boxes = []
-    for box in boxes:
-        new_box = torch.zeros([1,12])
-        # rotate center vector
-        new_box[0,0] = -box[0,2]
-        new_box[0,1] = box[0,1]
-        new_box[0,2] = box[0,0]
-        
-        # rotate principal directions
-        new_box[0,6] = -box[0,8]
-        new_box[0,7] = box[0,7]
-        new_box[0,8] = box[0,6]
-        
-        new_box[0,9] = -box[0,11]
-        new_box[0,10] = box[0,10]
-        new_box[0,11] = box[0,9]
-        
-        # re-compute principal directions
-        dir_1 = new_box[0,6:9]
-        dir_2 = new_box[0,9:]
-        dir_1 = dir_1/np.linalg.norm(dir_1)
-        dir_2 = dir_2/np.linalg.norm(dir_2)
-        dir_3 = np.cross(dir_1, dir_2)
-        dir_3 = dir_3/np.linalg.norm(dir_3)
-        
-        # realign axes
-        x_dir, x_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 0)
-        y_dir, y_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 1)
-        z_dir, z_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 2)
-        
-        new_box[0,3] = y_len
-        new_box[0,4] = z_len
-        new_box[0,5] = x_len
+# reverse box rotation (input 1 by 12 tensor)
+def unrotate_box(box):   
+    new_box = torch.zeros([1,12])
+    # rotate center vector
+    new_box[0,0] = -box[0,2]
+    new_box[0,1] = box[0,1]
+    new_box[0,2] = box[0,0]
+    
+    # rotate principal directions
+    new_box[0,6] = -box[0,8]
+    new_box[0,7] = box[0,7]
+    new_box[0,8] = box[0,6]
+    
+    new_box[0,9] = -box[0,11]
+    new_box[0,10] = box[0,10]
+    new_box[0,11] = box[0,9]
+    
+    # re-compute principal directions
+    dir_1 = new_box[0,6:9]
+    dir_2 = new_box[0,9:]
+    dir_1 = dir_1/np.linalg.norm(dir_1)
+    dir_2 = dir_2/np.linalg.norm(dir_2)
+    dir_3 = np.cross(dir_1, dir_2)
+    dir_3 = dir_3/np.linalg.norm(dir_3)
+    
+    # realign axes
+    x_dir, x_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 0)
+    y_dir, y_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 1)
+    z_dir, z_len = bestDir([dir_1, dir_2, dir_3], box[0,3:6], 2)
+    
+    new_box[0,3] = y_len
+    new_box[0,4] = z_len
+    new_box[0,5] = x_len
 
-        new_box[0,6:9] = torch.FloatTensor(y_dir)
-        new_box[0,9:12] = torch.FloatTensor(z_dir)
-        new_boxes.append(new_box)
+    new_box[0,6:9] = torch.FloatTensor(y_dir)
+    new_box[0,9:12] = torch.FloatTensor(z_dir)
 
-    return new_boxes
+    return new_box
 
 
 def decode_structure(root):

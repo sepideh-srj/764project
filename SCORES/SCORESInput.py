@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree, rotate_box_list_back
+from grassdata import GRASSDataset, Tree
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -770,6 +770,7 @@ mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda stor
 mergeNetFix = mergeNetFix.cpu()
 
 allBoxes,idxs = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+
 allObjs = []
 for index in idxs:
     index = int(index.item())
