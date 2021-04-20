@@ -155,8 +155,11 @@ def decode_boxes(root):
     boxes = []
     labels = []
     syms_out = []
+    objs = []
+
     while len(stack) > 0:
         node = stack.pop()
+
         node_type = torch.LongTensor([node.node_type.value]).item()
         if node_type == 1:  # ADJ
             # left, right = model.adjDecoder(f)
@@ -174,12 +177,91 @@ def decode_boxes(root):
             # print(node.sym.squeeze(0))
         if node_type == 0:  # BOX
             reBox = node.box
+            reBoxes = [reBox]
+            reLabels = [node.label]
+            reObj = [node.objname]
             s = syms.pop()
-            boxes.append(reBox)
             syms_out.append(s)
-            # print(node.label.item())
-            labels.append(node.label)
-    return boxes, syms_out, labels
+            l1 = abs(s[0] + 1)
+            l2 = abs(s[0])
+            l3 = abs(s[0] - 1)
+            if l1 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                f1 = torch.cat([sList[1], sList[2], sList[3]])
+                f1 = f1 / torch.norm(f1)
+                f2 = torch.cat([sList[4], sList[5], sList[6]])
+                folds = round(1 / s[7].item())
+
+                for i in range(folds - 1):
+                    rotvector = torch.cat([f1, sList[7].mul(2 * 3.1415).mul(i + 1)])
+                    rotm = vrrotvec2mat(rotvector)
+                    center = torch.cat([bList[0], bList[1], bList[2]])
+                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                    newcenter = rotm.matmul(center.add(-f2)).add(f2)
+                    newdir1 = rotm.matmul(dir1)
+                    newdir2 = rotm.matmul(dir2)
+                    newbox = torch.cat([newcenter, dir0, newdir1, newdir2])
+                    reBoxes.append(newbox.unsqueeze(0))
+                    reLabels.append(node.label)
+                    reObj.append(node.objname)
+                    syms_out.append(s)
+            if l3 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                trans = torch.cat([sList[1], sList[2], sList[3]])
+                trans_end = torch.cat([sList[4], sList[5], sList[6]])
+                center = torch.cat([bList[0], bList[1], bList[2]])
+                trans_length = math.sqrt(torch.sum(trans ** 2))
+                trans_total = math.sqrt(torch.sum(trans_end.add(-center) ** 2))
+                folds = round(trans_total / trans_length)
+
+                for i in range(folds):
+                    center = torch.cat([bList[0], bList[1], bList[2]])
+                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                    newcenter = center.add(trans.mul(i + 1))
+                    newbox = torch.cat([newcenter, dir0, dir1, dir2])
+                    reBoxes.append(newbox.unsqueeze(0))
+                    reLabels.append(node.label)
+                    reObj.append(node.objname)
+                    syms_out.append(s)
+            if l2 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                ref_normal = torch.cat([sList[1], sList[2], sList[3]])
+                ref_normal = ref_normal / torch.norm(ref_normal)
+                ref_point = torch.cat([sList[4], sList[5], sList[6]])
+                center = torch.cat([bList[0], bList[1], bList[2]])
+                dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                if ref_normal.matmul(ref_point.add(-center)) < 0:
+                    ref_normal = -ref_normal
+                newcenter = ref_normal.mul(2 * abs(torch.sum(ref_point.add(-center).mul(ref_normal)))).add(center)
+                if ref_normal.matmul(dir1) < 0:
+                    ref_normal = -ref_normal
+                dir1 = dir1.add(ref_normal.mul(-2 * ref_normal.matmul(dir1)))
+                if ref_normal.matmul(dir2) < 0:
+                    ref_normal = -ref_normal
+                dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
+                newbox = torch.cat([newcenter, dir0, dir1, dir2])
+                reBoxes.append(newbox.unsqueeze(0))
+                reLabels.append(node.label)
+                reObj.append(node.objname)
+                syms_out.append(s)
+
+            boxes.extend(reBoxes)
+            labels.extend(reLabels)
+            objs.extend(reObj)
+            # print(len(boxes))
+            # print(len(labels))
+            # print(len(objs))
+            # print(len(syms_out))
+    return boxes, syms_out, labels, objs
 
 
 # %% md
@@ -488,20 +570,23 @@ def saveMatsNoSym(boxes, directory, suffix):
 # I've noticed this pattern in the SCORES input so just trying to be consistent with it
 
 
-def reshuffle(boxes, syms, labels):
+def reshuffle(boxes, syms, labels, objs):
     new_boxes = []
     new_syms = []
     new_labels = []
-    for box, sym, label in zip(boxes, syms, labels):
+    new_objs = []
+    for box, sym, label, obj in zip(boxes, syms, labels, objs):
         if sym[0] == 10.:
             new_boxes.append(box)
             new_syms.append(sym)
             new_labels.append(label)
+            new_objs.append(obj)
         else:
             new_boxes = [box] + new_boxes
             new_syms = [sym] + new_syms
             new_labels = [label] + new_labels
-    return new_boxes, new_syms, new_labels
+            new_objs = [obj] + new_objs
+    return new_boxes, new_syms, new_labels, new_objs
 
 
 # %%
@@ -635,18 +720,19 @@ new_tree2 = grassdataset[7]
 
 allnewboxes,_ = decode_structure_with_labels(new_tree1.root)
 showGenshape(allnewboxes)
-boxes1, syms1, labels1 = decode_boxes(new_tree1.root)
+boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 
 allnewboxes,_ = decode_structure_with_labels(new_tree2.root)
 showGenshape(allnewboxes)
-boxes2, syms2, labels2 = decode_boxes(new_tree2.root)
+boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
 
 # select boxes with labels 0 and 1 from tree 1
 ids = [i for i in range(len(labels1)) if labels1[i] in [0, 1]]
 boxes_A = [boxes1[i] for i in ids]
 syms_A = [syms1[i] for i in ids]
 labels_A = [labels1[i] for i in ids]
-boxes_A, syms_A, labels_A = reshuffle(boxes_A, syms_A, labels_A)
+objs_A = [objs1[i] for i in ids]
+boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
 print('Boxes A:')
 showGenshape(boxes_A)
 
@@ -655,7 +741,9 @@ ids = [i for i in range(len(labels2)) if labels2[i] in [2, 3]]
 boxes_B = [boxes2[i] for i in ids]
 syms_B = [syms2[i] for i in ids]
 labels_B = [labels2[i] for i in ids]
-boxes_B, syms_B, labels_B = reshuffle(boxes_B, syms_B, labels_B)
+objs_B = [objs2[i] for i in ids]
+
+boxes_B, syms_B, labels_B, objs_B = reshuffle(boxes_B, syms_B, labels_B, objs_B)
 print('Boxes B:')
 showGenshape(boxes_B)
 
@@ -668,6 +756,7 @@ allTestData = SCORESTest('test_one_shape')
 testFile = allTestData[0]
 originalNodes = testFile.leves
 boxes = testVQContext.render_node_to_boxes(originalNodes)
+
 print('Input Boxes:')
 draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
 
@@ -676,6 +765,7 @@ mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda stor
 mergeNetFix = mergeNetFix.cpu()
 
 allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+
 print(len(allBoxes), 'output boxes:')
 for boxes in allBoxes:
     draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
