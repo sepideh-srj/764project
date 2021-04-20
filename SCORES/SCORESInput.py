@@ -143,6 +143,7 @@ def showGenshape(genshape):
     plt.show()
 
 
+
 # %%
 
 def decode_boxes(root):
@@ -584,9 +585,9 @@ def rotate_boxes_old(boxes, syms):
 
 
 # load data from database
-dir = '../../partNet_syms/Chair'
-grassdataset = GRASSDataset(dir,10)
-
+dir_syms = '../../partNet_syms/Chair'
+dir_obj = '../../partNet_objs'
+grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 
 # # Select the chair number that we want for first chair
 # k = 2
@@ -632,11 +633,11 @@ grassdataset = GRASSDataset(dir,10)
 new_tree1 = grassdataset[1]
 new_tree2 = grassdataset[7]
 
-allnewboxes = decode_structure(new_tree1.root)
+allnewboxes,_ = decode_structure_with_labels(new_tree1.root)
 showGenshape(allnewboxes)
 boxes1, syms1, labels1 = decode_boxes(new_tree1.root)
 
-allnewboxes = decode_structure(new_tree2.root)
+allnewboxes,_ = decode_structure_with_labels(new_tree2.root)
 showGenshape(allnewboxes)
 boxes2, syms2, labels2 = decode_boxes(new_tree2.root)
 
