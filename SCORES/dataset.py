@@ -6,6 +6,7 @@ from random import randint
 import numpy as np
 from torch.autograd import Variable
 import copy
+import os
 from itertools import combinations
 
 class Tree(object):
@@ -432,77 +433,51 @@ class TestData(object):
             labelDataAll.append(l)
         
         self.labelDataAll = labelDataAll
-        
-    def __init__(self, boxA, boxB, symA, symB, adjA, adjB, idxA, idxB, adjgen, isNoise):
+
+    def __init__(self, boxes, syms, adjs, idxs, adjgen):
         self.hasLabel = False
-        self.boxA = torch.t(boxA)
-        self.boxB = torch.t(boxB)
-        self.symA = torch.t(symA)
-        self.symB = torch.t(symB)
-        self.adjA = adjA
-        self.adjB = adjB
-        self.idxA = idxA
-        self.idxB = idxB
+        self.boxA = torch.t(boxes[0])
+        self.boxB = torch.t(boxes[1])
+        self.symA = torch.t(syms[0])
+        self.symB = torch.t(syms[1])
+        self.adjA = adjs[0]
+        self.adjB = adjs[1]
+        self.idxA = idxs[0]
+        self.idxB = idxs[1]
         self.adjGen =  [int(b[0]) for b in torch.split(torch.t(adjgen).squeeze(0), 1, 0)]
 
-        bufferA = [b for b in torch.split(self.boxA, 1, 0)]
-        bufferB = [b for b in torch.split(self.boxB, 1, 0)]
-
-        idsA = [b for b in torch.split(idxA, 1, 0)]
-        idsB = [b for b in torch.split(idxB, 1, 0)]
-
-        symparaA = [s for s in torch.split(self.symA, 1, 0)]
-        symparaB = [s for s in torch.split(self.symB, 1, 0)]
-        sympara = []
-
-        for sym in symparaA:
-            if torch.sum(sym) == -8:
-                continue
-            sympara.append(sym)
-
-        for sym in symparaB:
-            if torch.sum(sym) == -8:
-                continue
-            sympara.append(sym)
-        
         self.leves = []
         queue = []
-        count = -1
-        for box in bufferA:
-            count = count + 1
-            if torch.sum(box) == 0:
-                continue
-            noise1 = box.new(1, 3).normal_(0, 0.04)
-            noise2 = box.new(1, 3).normal_(0, 0.02)
-            noise3 = box.new(1, 3).normal_(0, 0.04)
-            noise4 = box.new(1, 3).normal_(0, 0.02)
-            noise = torch.cat((noise1, noise2, noise3, noise4), 1)
-            if isNoise is 1:
-                n = Tree.Node(leaf=box+noise, nType=0, sym = symparaA[count].squeeze(0), idx=idsA[count])
-            else:
-                n = Tree.Node(leaf=box, nType=0, sym = symparaA[count].squeeze(0), idx=idsA[count])
-            self.leves.append(n)
-            queue.append(n)
-
-        splitNum = len(queue)
-
-        count = -1
-        for box in bufferB:
-            count = count + 1
-            if torch.sum(box) == 0:
-                continue
-            noise1 = box.new(1, 3).normal_(0, 0.04)
-            noise2 = box.new(1, 3).normal_(0, 0.02)
-            noise3 = box.new(1, 3).normal_(0, 0.04)
-            noise4 = box.new(1, 3).normal_(0, 0.02)
-            noise = torch.cat((noise1, noise2, noise3, noise4), 1)
-            if isNoise is 1:
-                n = Tree.Node(leaf=box+noise, nType=0, sym = symparaB[count].squeeze(0), idx=idsB[count]+10000)
-            else:
-                n = Tree.Node(leaf=box, nType=0, sym = symparaB[count].squeeze(0), idx=idsB[count]+10000)
-            self.leves.append(n)
-            queue.append(n)
+        sympara = []
+        splits = []
         
+        for k in range(len(boxes)):
+            current_boxes = torch.t(boxes[k])
+            buffer = [b for b in torch.split(current_boxes, 1, 0)]
+
+            current_syms = torch.t(syms[k])
+            current_sympara = [s for s in torch.split(current_syms, 1, 0)]
+
+            current_ids = [b for b in torch.split(idxs[k], 1, 0)]
+
+            for sym in current_sympara:
+                if torch.sum(sym) == -8:
+                    continue
+                sympara.append(sym)
+            
+            count = -1
+            for box in buffer:
+                count = count + 1
+                if torch.sum(box) == 0:
+                    continue
+                n = Tree.Node(leaf=box, nType=0, sym = current_sympara[count].squeeze(0), idx=current_ids[count]+k*10000)
+                self.leves.append(n)
+                queue.append(n)
+
+            splits.append(len(queue))
+        
+        print(splits)
+
         boxNum = len(queue)
         boxFlag = [-1] * boxNum
         currentFlag = 0
@@ -517,7 +492,7 @@ class TestData(object):
                 if EqualSymPara(symsI, symsJ):
                     boxFlag[j] = currentFlag
             currentFlag = currentFlag + 1
-        
+
         treeQueue = []
         idxQueue = []
         boxidxQueue = []
@@ -549,11 +524,12 @@ class TestData(object):
             self.setSymForAllKids(subQueue[0], idx)
 
         self.adjAll = torch.ones(boxNum, boxNum)
-        self.adjAll[0:splitNum, 0:splitNum] = self.adjA[0:splitNum, 0:splitNum]
-        self.adjAll[splitNum:boxNum, splitNum:boxNum] = self.adjB[0:boxNum-splitNum, 0:boxNum-splitNum]
-
-        #self.adjAll[3,4] = 0
-        #self.adjAll[4,3] = 0
+        prev_splitNum = 0
+        for k in range(len(splits)-1):
+            splitNum = splits[k]
+            n = splitNum-prev_splitNum
+            self.adjAll[prev_splitNum:splitNum, prev_splitNum:splitNum] = adjs[k][0:n, 0:n]
+            prev_splitNum = splitNum
         
         self.treeQueue = treeQueue
         self.idxQueue = idxQueue
@@ -915,12 +891,36 @@ class SCORESTest(data.Dataset):
         self.idxBData = torch.chunk(idxB,l,1)
         self.adjGenData = torch.chunk(adjGen,l,1)
 
+        if os.path.isfile(root+'/boxesC.mat'):
+            bC = torch.from_numpy(loadmat(root+'/boxesC.mat')['boxesC']).float()
+            sC = torch.from_numpy(loadmat(root+'/symsC.mat')['symsC']).float()
+            adjC = torch.from_numpy(loadmat(root+'/adjC.mat')['adjC']).float()
+            idxC = torch.from_numpy(loadmat(root+'/idxC.mat')['idxC']).float()
+            self.boxCData = torch.chunk(bC,l,1)
+            self.symCData = torch.chunk(sC,l,1)
+            self.adjCData = torch.chunk(adjC,l,1)
+            self.idxCData = torch.chunk(idxC,l,1)
+        else:
+            self.boxCData = None
+            self.symCData = None
+            self.adjCData = None
+            self.idxCData = None
+
     def __getitem__(self, index):
         objRoot = self.root + '/' + str(index+1)
-        if index == 0:
-            data = TestData(self.boxAData[index], self.boxBData[index], self.symAData[index], self.symBData[index], self.adjAData[index], self.adjBData[index], self.idxAData[index], self.idxBData[index], self.adjGenData[index], 0)
-        else:
-            data = TestData(self.boxAData[index], self.boxBData[index], self.symAData[index], self.symBData[index], self.adjAData[index], self.adjBData[index], self.idxAData[index], self.idxBData[index], self.adjGenData[index], 0)
+        #data = TestData(self.boxAData[index], self.boxBData[index], self.symAData[index], self.symBData[index], self.adjAData[index], self.adjBData[index], self.idxAData[index], self.idxBData[index], self.adjGenData[index], 0)
+        boxes = [self.boxAData[index], self.boxBData[index]]
+        syms = [self.symAData[index], self.symBData[index]]
+        adjs = [self.adjAData[index], self.adjBData[index]]
+        idxs = [self.idxAData[index], self.idxBData[index]]
+
+        if self.boxCData is not None:
+            boxes.append(self.boxCData[index])
+            syms.append(self.symCData[index])
+            adjs.append(self.adjCData[index])
+            idxs.append(self.idxCData[index])
+
+        data = TestData(boxes, syms, adjs, idxs, self.adjGenData[index])
         return data
 
     def __len__(self):

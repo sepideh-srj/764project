@@ -633,7 +633,8 @@ grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 
 
 new_tree1 = grassdataset[1]
-new_tree2 = grassdataset[7]
+new_tree2 = grassdataset[1]
+new_tree3 = grassdataset[7]
 
 allnewboxes,_ = decode_structure_with_labels(new_tree1.root)
 showGenshape(allnewboxes)
@@ -643,8 +644,12 @@ allnewboxes,_ = decode_structure_with_labels(new_tree2.root)
 showGenshape(allnewboxes)
 boxes2, syms2, labels2 = decode_boxes(new_tree2.root)
 
-# select boxes with labels 0 and 1 from tree 1
-ids = [i for i in range(len(labels1)) if labels1[i] in [0, 1]]
+allnewboxes,_ = decode_structure_with_labels(new_tree3.root)
+showGenshape(allnewboxes)
+boxes3, syms3, labels3 = decode_boxes(new_tree3.root)
+
+# select boxes with labels 0 from tree 1
+ids = [i for i in range(len(labels1)) if labels1[i] in [0]]
 boxes_A = [boxes1[i] for i in ids]
 syms_A = [syms1[i] for i in ids]
 labels_A = [labels1[i] for i in ids]
@@ -652,8 +657,8 @@ boxes_A, syms_A, labels_A = reshuffle(boxes_A, syms_A, labels_A)
 print('Boxes A:')
 showGenshape(boxes_A)
 
-# select boxes with labels 2 and 3 from tree 2
-ids = [i for i in range(len(labels2)) if labels2[i] in [2, 3]]
+# select boxes with labels 1 from tree 2
+ids = [i for i in range(len(labels2)) if labels2[i] in [1]]
 boxes_B = [boxes2[i] for i in ids]
 syms_B = [syms2[i] for i in ids]
 labels_B = [labels2[i] for i in ids]
@@ -661,8 +666,18 @@ boxes_B, syms_B, labels_B = reshuffle(boxes_B, syms_B, labels_B)
 print('Boxes B:')
 showGenshape(boxes_B)
 
+# select boxes with labels 2 and 3 from tree 2
+ids = [i for i in range(len(labels3)) if labels3[i] in [2, 3]]
+boxes_C = [boxes3[i] for i in ids]
+syms_C = [syms3[i] for i in ids]
+labels_C = [labels3[i] for i in ids]
+boxes_C, syms_C, labels_C = reshuffle(boxes_C, syms_C, labels_C)
+print('Boxes C:')
+showGenshape(boxes_C)
+
 saveMats(boxes_A, syms_A, 'test_one_shape', 'A')
 saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
+saveMats(boxes_C, syms_C, 'test_one_shape', 'C')
 
 # %%
 # Run scores on the new data
@@ -679,7 +694,7 @@ mergeNetFix = mergeNetFix.cpu()
 
 allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
 print(len(allBoxes), 'output boxes:')
-for boxes in allBoxes:
+for boxes in allBoxes[-1:]:
     draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
 
 # %%
