@@ -332,12 +332,13 @@ def render_node_to_boxes(nodes):
                 reBoxes.append(newbox.unsqueeze(0))
                 subIds.append(n.idx)
 
+            idxs.extend(subIds)
             boxes.extend(reBoxes)
 
-    return boxes
+    return boxes, idxs
 
-def oneIterMerge(model, testdata, sampleK=4):
-    patches = testdata.sampleKsubstructure(sampleK)
+def oneIterMerge(model, testdata):
+    patches = testdata.sampleKsubstructure(4)
     vqSum = 0
     count = 0
     for tree in patches:
@@ -368,12 +369,12 @@ def oneIterMerge(model, testdata, sampleK=4):
         return testdata.leves
 
 
-def iterateKMergeTest(model, testdata, sampleK=4):
-    inputBox = [render_node_to_boxes(testdata.leves)]
+def iterateKMergeTest(model, testdata):
+    inputBox = [render_node_to_boxes(testdata.leves)[0]]
     for i in range(16):
-        boxes= oneIterMerge(model, testdata, sampleK)
+        boxes= oneIterMerge(model, testdata)
         #if i % 5 == 0:
-        box_all = render_node_to_boxes(boxes)
+        box_all, idxs = render_node_to_boxes(boxes)
         inputBox.append(box_all)
 
-    return inputBox
+    return inputBox, idxs

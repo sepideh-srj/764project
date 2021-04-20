@@ -1,1 +1,3 @@
 SCORES/__pycache__/
+SCORES/*.OBJ
+SCORES/test_one_shape
