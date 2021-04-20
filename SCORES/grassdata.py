@@ -3,6 +3,8 @@ from torch.utils import data
 from scipy.io import loadmat
 from enum import Enum
 import os
+import json
+import numpy as np
 
 class Tree(object):
     class NodeType(Enum):
@@ -11,13 +13,14 @@ class Tree(object):
         SYM = 2  # symmetry (symmetric part grouping) node
 
     class Node(object):
-        def __init__(self, box=None, left=None, right=None, node_type=None, sym=None, label=None):
+        def __init__(self, box=None, left=None, right=None, node_type=None, sym=None, label=None, objname=None):
             self.box = box          # box feature vector for a leaf node
             self.sym = sym          # symmetry parameter vector for a symmetry node
             self.left = left        # left child for ADJ or SYM (a symmeter generator)
             self.right = right      # right child
             self.node_type = node_type
             self.label = label
+            self.objname = objname
 
         def is_leaf(self):
             return self.node_type == Tree.NodeType.BOX and self.box is not None
@@ -28,17 +31,18 @@ class Tree(object):
         def is_sym(self):
             return self.node_type == Tree.NodeType.SYM
 
-    def __init__(self, boxes, ops, syms, labels):
+    def __init__(self, boxes, ops, syms, labels, objname):
         box_list = [b for b in torch.split(boxes, 1, 0)]
         sym_param = [s for s in torch.split(syms, 1, 0)]
         label_list = [l for l in labels[0]]
         box_list.reverse()
         sym_param.reverse()
         label_list.reverse()
+        objname.reverse()
         queue = []
         for id in range(ops.size()[1]):
             if ops[0, id] == Tree.NodeType.BOX.value:
-                queue.append(Tree.Node(box=box_list.pop(), node_type=Tree.NodeType.BOX, label=label_list.pop()))
+                queue.append(Tree.Node(box=box_list.pop(), node_type=Tree.NodeType.BOX, label=label_list.pop(), objname=objname.pop()))
             elif ops[0, id] == Tree.NodeType.ADJ.value:
                 left_node = queue.pop()
                 right_node = queue.pop()
@@ -85,23 +89,132 @@ def rotate_boxes(boxes, syms):
     return new_boxes, new_syms
 
 
+def decode_structure(root):
+    """
+    Decode a root code into a tree structure of boxes
+    """
+    # decode = model.sampleDecoder(root_code)
+    syms = [torch.ones(8).mul(10)]
+    stack = [root]
+    boxes = []
+    while len(stack) > 0:
+        node = stack.pop()
+        # label_prob = model.nodeClassifier(f)
+        # _, label = torch.max(label_prob, 1)
+        # label = node.label.item()
+        node_type = torch.LongTensor([node.node_type.value]).item()
+        if node_type == 1:  # ADJ
+            # left, right = model.adjDecoder(f)
+            stack.append(node.left)
+            stack.append(node.right)
+            s = syms.pop()
+            syms.append(s)
+            syms.append(s)
+        if node_type == 2:  # SYM
+            # left, s = model.symDecoder(f)
+            # s = s.squeeze(0)
+            stack.append(node.left)
+            syms.pop()
+            syms.append(node.sym.squeeze(0))
+        if node_type == 0:  # BOX
+            reBox = node.box
+            reBoxes = [reBox]
+            s = syms.pop()
+            l1 = abs(s[0] + 1)
+            l2 = abs(s[0])
+            l3 = abs(s[0] - 1)
+            if l1 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                f1 = torch.cat([sList[1], sList[2], sList[3]])
+                f1 = f1 / torch.norm(f1)
+                f2 = torch.cat([sList[4], sList[5], sList[6]])
+                folds = round(1 / s[7].item())
+                for i in range(folds - 1):
+                    rotvector = torch.cat([f1, sList[7].mul(2 * 3.1415).mul(i + 1)])
+                    rotm = vrrotvec2mat(rotvector)
+                    center = torch.cat([bList[0], bList[1], bList[2]])
+                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                    newcenter = rotm.matmul(center.add(-f2)).add(f2)
+                    newdir1 = rotm.matmul(dir1)
+                    newdir2 = rotm.matmul(dir2)
+                    newbox = torch.cat([newcenter, dir0, newdir1, newdir2])
+                    reBoxes.append(newbox)
+            if l3 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                trans = torch.cat([sList[1], sList[2], sList[3]])
+                trans_end = torch.cat([sList[4], sList[5], sList[6]])
+                center = torch.cat([bList[0], bList[1], bList[2]])
+                trans_length = math.sqrt(torch.sum(trans ** 2))
+                trans_total = math.sqrt(torch.sum(trans_end.add(-center) ** 2))
+                folds = round(trans_total / trans_length)
+                for i in range(folds):
+                    center = torch.cat([bList[0], bList[1], bList[2]])
+                    dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                    dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                    dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                    newcenter = center.add(trans.mul(i + 1))
+                    newbox = torch.cat([newcenter, dir0, dir1, dir2])
+                    reBoxes.append(newbox)
+            if l2 < 0.15:
+                sList = torch.split(s, 1, 0)
+                bList = torch.split(reBox.data.squeeze(0), 1, 0)
+                ref_normal = torch.cat([sList[1], sList[2], sList[3]])
+                ref_normal = ref_normal / torch.norm(ref_normal)
+                ref_point = torch.cat([sList[4], sList[5], sList[6]])
+                center = torch.cat([bList[0], bList[1], bList[2]])
+                dir0 = torch.cat([bList[3], bList[4], bList[5]])
+                dir1 = torch.cat([bList[6], bList[7], bList[8]])
+                dir2 = torch.cat([bList[9], bList[10], bList[11]])
+                if ref_normal.matmul(ref_point.add(-center)) < 0:
+                    ref_normal = -ref_normal
+                newcenter = ref_normal.mul(2 * abs(torch.sum(ref_point.add(-center).mul(ref_normal)))).add(center)
+                if ref_normal.matmul(dir1) < 0:
+                    ref_normal = -ref_normal
+                dir1 = dir1.add(ref_normal.mul(-2 * ref_normal.matmul(dir1)))
+                if ref_normal.matmul(dir2) < 0:
+                    ref_normal = -ref_normal
+                dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
+                newbox = torch.cat([newcenter, dir0, dir1, dir2])
+                reBoxes.append(newbox)
+
+            boxes.extend(reBoxes)
+    return boxes
+
+
 
 class GRASSDataset(data.Dataset,):
-    def __init__(self, dir, models_num=0, transform=None):
-        self.dir = dir
-        num_examples = len(os.listdir(os.path.join(dir, 'ops')))
+    def __init__(self, dir_syms, dir_objs, models_num=0, transform=None):
+        self.dir = dir_syms
+        num_examples = len(os.listdir(os.path.join(dir_syms, 'ops')))
         self.transform = transform
         self.trees = []
         self.Ids = []
         for i in range(models_num):
-            boxes = torch.from_numpy(loadmat(os.path.join(dir, 'boxes', '%d.mat' % (i+1)))['box']).t().float()
-            ops = torch.from_numpy(loadmat(os.path.join(dir, 'ops', '%d.mat' % (i+1)))['op']).int()
-            syms = torch.from_numpy(loadmat(os.path.join(dir, 'syms', '%d.mat' % (i+1)))['sym']).t().float()
-            labels = torch.from_numpy(loadmat(os.path.join(dir, 'labels', '%d.mat' % (i+1)))['label']).int()
-            shapeId = loadmat(os.path.join(dir, 'part mesh indices', '%d.mat' % (i+1)))['shapename']
+            boxes = torch.from_numpy(loadmat(os.path.join(dir_syms, 'boxes', '%d.mat' % (i+1)))['box']).t().float()
+            ops = torch.from_numpy(loadmat(os.path.join(dir_syms, 'ops', '%d.mat' % (i+1)))['op']).int()
+            syms = torch.from_numpy(loadmat(os.path.join(dir_syms, 'syms', '%d.mat' % (i+1)))['sym']).t().float()
+            labels = torch.from_numpy(loadmat(os.path.join(dir_syms, 'labels', '%d.mat' % (i+1)))['label']).int()
+            shapeId = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['shapename'].item()
+            objcorrespondence = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['cell_boxs_correspond_objSerialNumber'][0]
+
+            json_file = open(os.path.join(dir_objs,shapeId,'result_after_merging.json'), 'r')
+            json_content = json.load(json_file)
+            json_file.close()
+            originalobjsloc = json_content[0]['objs']
+
+            objnames = []
+            for box in objcorrespondence:
+                box_objs = []
+                for index in box[0]:
+                    box_objs.append(shapeId+'/objs/'+originalobjsloc[index-1]+'.obj')
+                objnames.append(box_objs)
 
             new_boxes1, new_syms1 = rotate_boxes(boxes, syms)
-            tree = Tree(new_boxes1, ops, new_syms1, labels)
+            tree = Tree(new_boxes1, ops, new_syms1, labels, objnames)
 
             self.trees.append(tree)
             self.Ids.append(shapeId)
