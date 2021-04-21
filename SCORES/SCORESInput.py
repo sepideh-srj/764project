@@ -784,6 +784,11 @@ mergeNetFix = mergeNetFix.cpu()
 iteration = 30
 for i in range(iteration):
     nodes_ = testVQContext.oneIterMerge(mergeNetFix, testFile)
+    
+    # hack to prevent symmetry changes
+    for node in nodes_:
+        if node.sym[0] < 1:
+            node.sym[0] = 1
     boxes_, _, _, idxs_ = testVQContext.render_node_to_boxes(originalNodes)
 
     allObjs_ = []
