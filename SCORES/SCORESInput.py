@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree
+from grassdata import GRASSDataset, Tree, unrotate_boxes
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -41,7 +41,7 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names):
                 if items[0] == 'f':
                     faces.append([int(items[1])+v_num, int(items[2])+v_num, int(items[3])+v_num])
             v_num += t
-        if False:
+        if isinstance(gtboxs[box_i], int):
             results.append((vertices, faces))
         else:
             gtbox = gtboxs[box_i].cpu().numpy().squeeze()
@@ -52,6 +52,8 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names):
             gtdir_1 = gtdir_1/LA.norm(gtdir_1)
             gtdir_2 = gtdir_2/LA.norm(gtdir_2)
             gtdir_3 = np.cross(gtdir_1, gtdir_2)
+            # gtdir_3 = gtdir_3/LA.norm(gtdir_3)
+
 
             predbox = boxes[box_i].cpu().numpy().squeeze()
             predCenter = predbox[0:3][np.newaxis, ...].T
@@ -61,8 +63,8 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names):
             preddir_1 = preddir_1/LA.norm(preddir_1)
             preddir_2 = preddir_2/LA.norm(preddir_2)
             preddir_3 = -np.cross(preddir_1, preddir_2)
+            # preddir_3 = preddir_3/LA.norm(preddir_3)
 
-            print(box_i, gtdir_3, preddir_3)
 
             scale = predlengths / gtlengths
             scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
@@ -100,6 +102,39 @@ def saveOBJ(obj_names, outfilename, results):
         offset += len(vertices)
     f.close()
 
+# def alignBoxAndRender(gtBoxes, predBoxes, boxes_type, obj_names, outfilename):
+#     results = renderBoxes2mesh(gtBoxes, boxes_type, obj_names)
+#     for i in range(len(results)):
+#         gtbox = gtBoxes[i].cpu().numpy().squeeze()
+#         gtCenter = gtbox[0:3][np.newaxis, ...].T
+#         gtlengths = gtbox[3:6]
+#         gtdir_1 = gtbox[6:9]
+#         gtdir_2 = gtbox[9:12]
+#         gtdir_1 = gtdir_1/LA.norm(gtdir_1)
+#         gtdir_2 = gtdir_2/LA.norm(gtdir_2)
+#         gtdir_3 = np.cross(gtdir_1, gtdir_2)
+#
+#         predbox = predBoxes[i].cpu().numpy().squeeze()
+#         predCenter = predbox[0:3][np.newaxis, ...].T
+#         predlengths = predbox[3:6]
+#         preddir_1 = predbox[6:9]
+#         preddir_2 = predbox[9:12]
+#         preddir_1 = preddir_1/LA.norm(preddir_1)
+#         preddir_2 = preddir_2/LA.norm(preddir_2)
+#         preddir_3 = np.cross(preddir_1, preddir_2)
+#
+#         scale = predlengths / gtlengths
+#         scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
+#         x = np.array(results[i][0]).T
+#         A = np.array([gtdir_1, gtdir_2, gtdir_3])
+#         B = np.array([preddir_1, preddir_2, preddir_3])
+#         B = B.T
+#         y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
+#         x = y.T
+#         for t in range(len(results[i][0])):
+#             results[i][0][t] = x[t]
+#     saveOBJ(obj_names, outfilename, results)
+#
 
 
 def tryPlot():
@@ -292,6 +327,8 @@ def decode_structure(root):
     syms = [torch.ones(8).mul(10)]
     stack = [root]
     boxes = []
+    objs = []
+    copyboxs = []
     while len(stack) > 0:
         node = stack.pop()
         # label_prob = model.nodeClassifier(f)
@@ -314,10 +351,14 @@ def decode_structure(root):
         if node_type == 0:  # BOX
             reBox = node.box
             reBoxes = [reBox]
+            recopyBoxes = [1]
+            reObj = node.objname
+            reObjs = [reObj]
             s = syms.pop()
             l1 = abs(s[0] + 1)
             l2 = abs(s[0])
             l3 = abs(s[0] - 1)
+            print(l1,l2,l3)
             if l1 < 0.15:
                 sList = torch.split(s, 1, 0)
                 bList = torch.split(reBox.data.squeeze(0), 1, 0)
@@ -337,6 +378,8 @@ def decode_structure(root):
                     newdir2 = rotm.matmul(dir2)
                     newbox = torch.cat([newcenter, dir0, newdir1, newdir2])
                     reBoxes.append(newbox)
+                    recopyBoxes.append(reBox)
+                    reObjs.append(reObj)
             if l3 < 0.15:
                 sList = torch.split(s, 1, 0)
                 bList = torch.split(reBox.data.squeeze(0), 1, 0)
@@ -354,6 +397,8 @@ def decode_structure(root):
                     newcenter = center.add(trans.mul(i + 1))
                     newbox = torch.cat([newcenter, dir0, dir1, dir2])
                     reBoxes.append(newbox)
+                    recopyBoxes.append(reBox)
+                    reObjs.append(reObj)
             if l2 < 0.15:
                 sList = torch.split(s, 1, 0)
                 bList = torch.split(reBox.data.squeeze(0), 1, 0)
@@ -375,9 +420,13 @@ def decode_structure(root):
                 dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
                 newbox = torch.cat([newcenter, dir0, dir1, dir2])
                 reBoxes.append(newbox)
+                recopyBoxes.append(reBox)
+                reObjs.append(reObj)
 
             boxes.extend(reBoxes)
-    return boxes
+            objs.extend(reObjs)
+            copyboxs.extend(recopyBoxes)
+    return boxes, copyboxs, objs
 
 
 # %%
@@ -592,142 +641,33 @@ def reshuffle(boxes, syms, labels, objs):
     return new_boxes, new_syms, new_labels, new_objs
 
 
-# %%
-
-# These are two versions of rotating boxes and symmetries, the old one confused the SCORES NN
-# The new one is better but needs a tweak for slanted boxes
-
-def rotate_boxes(boxes, syms):
-    new_boxes = torch.zeros(boxes.shape)
-    for k in range(boxes.shape[0]):
-        new_boxes[k, 0] = boxes[k, 2]
-        new_boxes[k, 1] = boxes[k, 1]
-        new_boxes[k, 2] = -boxes[k, 0]
-
-        new_boxes[k, 3] = boxes[k, 3]
-        new_boxes[k, 4] = boxes[k, 5]
-        new_boxes[k, 5] = boxes[k, 4]
-
-        new_boxes[k, 6] = boxes[k, 6]
-        new_boxes[k, 7] = boxes[k, 7]
-        new_boxes[k, 8] = boxes[k, 8]
-
-        new_boxes[k, 9] = boxes[k, 9]
-        new_boxes[k, 10] = boxes[k, 10]
-        new_boxes[k, 11] = boxes[k, 11]
-
-    # rotate syms
-    new_syms = torch.zeros(syms.shape)
-    for k in range(syms.shape[0]):
-        new_syms[k, 0] = syms[k, 0]
-
-        new_syms[k, 1] = syms[k, 3]
-        new_syms[k, 2] = syms[k, 2]
-        new_syms[k, 3] = -syms[k, 1]
-
-        new_syms[k, 4] = syms[k, 6]
-        new_syms[k, 5] = syms[k, 5]
-        new_syms[k, 6] = -syms[k, 4]
-
-        new_syms[k, 7] = syms[k, 7]
-    return new_boxes, new_syms
-
-
-def rotate_boxes_old(boxes, syms):
-    new_boxes = torch.zeros(boxes.shape)
-    for k in range(boxes.shape[0]):
-        new_boxes[k, 0] = boxes[k, 2]
-        new_boxes[k, 1] = boxes[k, 1]
-        new_boxes[k, 2] = -boxes[k, 0]
-
-        new_boxes[k, 3] = boxes[k, 3]
-        new_boxes[k, 4] = boxes[k, 4]
-        new_boxes[k, 5] = boxes[k, 5]
-
-        new_boxes[k, 6] = boxes[k, 8]
-        new_boxes[k, 7] = boxes[k, 7]
-        new_boxes[k, 8] = -boxes[k, 6]
-
-        new_boxes[k, 9] = boxes[k, 11]
-        new_boxes[k, 10] = boxes[k, 10]
-        new_boxes[k, 11] = -boxes[k, 9]
-
-    # rotate syms
-    new_syms = torch.zeros(syms.shape)
-    for k in range(syms.shape[0]):
-        new_syms[k, 0] = syms[k, 0]
-
-        new_syms[k, 1] = syms[k, 3]
-        new_syms[k, 2] = syms[k, 2]
-        new_syms[k, 3] = -syms[k, 1]
-
-        new_syms[k, 4] = syms[k, 6]
-        new_syms[k, 5] = syms[k, 5]
-        new_syms[k, 6] = -syms[k, 4]
-
-        new_syms[k, 7] = syms[k, 7]
-    return new_boxes, new_syms
-
-
-# %%
-
-
 # load data from database
 dir_syms = '../../partNet_syms/Chair'
 dir_obj = '../../partNet_objs'
 grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 
-# # Select the chair number that we want for first chair
-# k = 2
-#
-# mat = loadmat('../../partNet_syms/Chair/part mesh indices/%s.mat' % (k,))
-# print('Chair ID 1:', mat['shapename'][0])
-# boxes1 = torch.from_numpy(loadmat(os.path.join(dir, 'boxes', '%d.mat' % (k,)))['box']).t().float()
-# ops1 = torch.from_numpy(loadmat(os.path.join(dir, 'ops', '%d.mat' % (k,)))['op']).int()
-# syms1 = torch.from_numpy(loadmat(os.path.join(dir, 'syms', '%d.mat' % (k,)))['sym']).t().float()
-# labels1 = torch.from_numpy(loadmat(os.path.join(dir, 'labels', '%d.mat' % (k,)))['label']).int()
-# old_tree1 = Tree(boxes1, ops1, syms1, labels1)
-#
-# # Select the chair number that we want for first chair
-# k = 8
-#
-# # load data from database
-# dir = '../../partNet_syms/Chair'
-# mat = loadmat('../../partNet_syms/Chair/part mesh indices/%s.mat' % (k,))
-# print('Chair ID 2:', mat['shapename'][0])
-# boxes2 = torch.from_numpy(loadmat(os.path.join(dir, 'boxes', '%d.mat' % (k,)))['box']).t().float()
-# ops2 = torch.from_numpy(loadmat(os.path.join(dir, 'ops', '%d.mat' % (k,)))['op']).int()
-# syms2 = torch.from_numpy(loadmat(os.path.join(dir, 'syms', '%d.mat' % (k,)))['sym']).t().float()
-# labels2 = torch.from_numpy(loadmat(os.path.join(dir, 'labels', '%d.mat' % (k,)))['label']).int()
-# old_tree2 = Tree(boxes2, ops2, syms2, labels2)
-#
-# oldboxes1 = decode_structure(old_tree1.root)
-# print('Old Boxes 1:')
-# showGenshape(oldboxes1)
-# oldboxes2 = decode_structure(old_tree2.root)
-# print('Old Boxes 2:')
-# showGenshape(oldboxes2)
-#
-# # rotate boxes (SCORES uses different rotation)
-# new_boxes1, new_syms1 = rotate_boxes(boxes1, syms1)
-# new_boxes2, new_syms2 = rotate_boxes(boxes2, syms2)
-# # new_boxes1, new_syms1 = boxes1, syms1
-# # new_boxes2, new_syms2 = boxes2, syms2
-#
-# # generate new tree
-# new_tree1 = Tree(new_boxes1, ops1, new_syms1, labels1)
-
-
 new_tree1 = grassdataset[1]
+org_tree1 = grassdataset.orgTrees[1]
 new_tree2 = grassdataset[7]
+org_tree2 = grassdataset.orgTrees[7]
 
-allnewboxes = decode_structure(new_tree1.root)
-showGenshape(allnewboxes)
+allnewboxes1, _, allobjs = decode_structure(new_tree1.root)
+_, allcopyBoxes1, _ = decode_structure(org_tree1.root)
+
+showGenshape(allnewboxes1)
 boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 
-allnewboxes = decode_structure(new_tree2.root)
-showGenshape(allnewboxes)
+saveOBJ(allobjs,'testObj_A.OBJ' , renderBoxes2mesh(allnewboxes1,allcopyBoxes1,allobjs))
+# alignBoxAndRender(allnewboxes, allnewboxes, allnewboxes, allobjs, 'testObj_A.OBJ')
+
+allnewboxes2, _, allobjs = decode_structure(new_tree2.root)
+_, allcopyBoxes2, _ = decode_structure(org_tree2.root)
+
+showGenshape(allnewboxes2)
 boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
+
+saveOBJ(allobjs, 'testObj_B.OBJ', renderBoxes2mesh(allnewboxes2,allcopyBoxes2,allobjs))
+# alignBoxAndRender(allnewboxes, allnewboxes, allnewboxes, allobjs, 'testObj_B.OBJ')
 
 # select boxes with labels 0 and 1 from tree 1
 ids = [i for i in range(len(labels1)) if labels1[i] in [0, 1]]
@@ -760,16 +700,10 @@ saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
 allTestData = SCORESTest('test_one_shape')
 testFile = allTestData[0]
 originalNodes = testFile.leves
-input_boxes,idxs = testVQContext.render_node_to_boxes(originalNodes)
+input_boxes, copyBoxes,idxs = testVQContext.render_node_to_boxes(originalNodes)
+input_boxes = unrotate_boxes(input_boxes)
+copyBoxes = unrotate_boxes(copyBoxes)
 
-print('Input Boxes:')
-draw3dOBB.showGenshape(torch.cat(input_boxes, 0).numpy())
-
-
-mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
-mergeNetFix = mergeNetFix.cpu()
-
-allBoxes,idxs = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
 allObjs = []
 for index in idxs:
     index = int(index.item())
@@ -778,14 +712,30 @@ for index in idxs:
     else:
         allObjs.append(objs_A[index])
 
-mesh = renderBoxes2mesh(input_boxes,input_boxes,allObjs)
-saveOBJ(allObjs, 'testObj.OBJ', mesh)
+saveOBJ(allobjs,'sampled_before.OBJ' , renderBoxes2mesh(input_boxes,copyBoxes,allobjs))
+
+print('Input Boxes:')
+draw3dOBB.showGenshape(torch.cat(input_boxes, 0).numpy())
+
+
+mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
+mergeNetFix = mergeNetFix.cpu()
+
+allBoxes, copyBoxes ,idxs = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+
+output_boxes = unrotate_boxes(allBoxes[16])
+copyBoxes = unrotate_boxes(copyBoxes)
+
+saveOBJ(allobjs,'sampled_after.OBJ' , renderBoxes2mesh(output_boxes,copyBoxes,allobjs))
+
+
+
+draw3dOBB.showGenshape(torch.cat(allBoxes[16], 0).numpy())
 
 # %%
 #
 # print(len(allBoxes), 'output boxes:')
 # for boxes in allBoxes:
-#     draw3dOBB.showGenshape(torch.cat(boxes, 0).numpy())
 
 
 

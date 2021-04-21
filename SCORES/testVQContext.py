@@ -252,12 +252,14 @@ def decode_Vq_loss(model, tree):
 def render_node_to_boxes(nodes):
     boxes = []
     idxs = []
+    copyBoxes = []
     for n in nodes:
         if n.sym is None:
             boxes.append(n.box)
         else:
             reBox = n.box
             reBoxes = [reBox]
+            reCopyBoxes = [reBox]
 
             bid = n.idx
             subIds = [bid]
@@ -288,6 +290,7 @@ def render_node_to_boxes(nodes):
                     newbox = torch.cat([newcenter, dir0, newdir1, newdir2])
                     reBoxes.append(newbox.unsqueeze(0))
                     subIds.append(bid)
+                    reCopyBoxes.append(reBox)
 
             if l2 < 0.16:
                 sList = torch.split(s, 1, 0)
@@ -307,6 +310,7 @@ def render_node_to_boxes(nodes):
                     newbox = torch.cat([newcenter, dir0, dir1, dir2])
                     reBoxes.append(newbox.unsqueeze(0))
                     subIds.append(n.idx)
+                    reCopyBoxes.append(reBox)
 
             if l3 < 0.16:
                 sList = torch.split(s, 1, 0)
@@ -331,11 +335,13 @@ def render_node_to_boxes(nodes):
                 newbox = torch.cat([newcenter, dir0, dir1, dir2])
                 reBoxes.append(newbox.unsqueeze(0))
                 subIds.append(n.idx)
+                reCopyBoxes.append(reBox)
 
             idxs.extend(subIds)
             boxes.extend(reBoxes)
+            copyBoxes.extend(reCopyBoxes)
 
-    return boxes, idxs
+    return boxes, copyBoxes, idxs
 
 def oneIterMerge(model, testdata):
     patches = testdata.sampleKsubstructure(4)
@@ -374,7 +380,7 @@ def iterateKMergeTest(model, testdata):
     for i in range(16):
         boxes= oneIterMerge(model, testdata)
         #if i % 5 == 0:
-        box_all, idxs = render_node_to_boxes(boxes)
+        box_all, copyBoxes, idxs = render_node_to_boxes(boxes)
         inputBox.append(box_all)
 
-    return inputBox, idxs
+    return inputBox, copyBoxes, idxs
