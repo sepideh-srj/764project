@@ -93,8 +93,8 @@ def rotate_boxes(boxes, syms):
         # re-compute principal directions
         dir_1 = new_boxes[k, 6:9]
         dir_2 = new_boxes[k, 9:]
-        dir_1 = dir_1 / np.linalg.norm(dir_1)
-        dir_2 = dir_2 / np.linalg.norm(dir_2)
+        dir_1 = dir_1.numpy() / np.linalg.norm(dir_1)
+        dir_2 = dir_2.numpy() / np.linalg.norm(dir_2)
         dir_3 = np.cross(dir_1, dir_2)
         dir_3 = dir_3 / np.linalg.norm(dir_3)
 
@@ -126,8 +126,63 @@ def rotate_boxes(boxes, syms):
         new_syms[k, 7] = syms[k, 7]
     return new_boxes, new_syms
 
+def rotate_boxes_only(boxes_list):
+    boxes = torch.zeros(len(boxes_list),12)
+    for i in range(len(boxes_list)):
+        boxes[i,:] = boxes_list[i]
+
+    new_boxes = torch.zeros(len(boxes_list),12)
+    for k in range(boxes.shape[0]):
+        # rotate center vector
+        new_boxes[k, 0] = boxes[k, 2]
+        new_boxes[k, 1] = boxes[k, 1]
+        new_boxes[k, 2] = -boxes[k, 0]
+
+        # rotate principal directions
+        new_boxes[k, 6] = boxes[k, 8]
+        new_boxes[k, 7] = boxes[k, 7]
+        new_boxes[k, 8] = -boxes[k, 6]
+
+        new_boxes[k, 9] = boxes[k, 11]
+        new_boxes[k, 10] = boxes[k, 10]
+        new_boxes[k, 11] = -boxes[k, 9]
+
+        # re-compute principal directions
+        dir_1 = new_boxes[k, 6:9]
+        dir_2 = new_boxes[k, 9:]
+        dir_1 = dir_1.numpy() / np.linalg.norm(dir_1)
+        dir_2 = dir_2.numpy() / np.linalg.norm(dir_2)
+        dir_3 = np.cross(dir_1, dir_2)
+        dir_3 = dir_3 / np.linalg.norm(dir_3)
+
+        # realign axes
+        x_dir, x_len = bestDir([dir_1, dir_2, dir_3], boxes[k, 3:6], 0)
+        y_dir, y_len = bestDir([dir_1, dir_2, dir_3], boxes[k, 3:6], 1)
+        z_dir, z_len = bestDir([dir_1, dir_2, dir_3], boxes[k, 3:6], 2)
+
+        new_boxes[k, 3] = y_len
+        new_boxes[k, 4] = z_len
+        new_boxes[k, 5] = x_len
+
+        new_boxes[k, 6:9] = torch.FloatTensor(y_dir)
+        new_boxes[k, 9:12] = torch.FloatTensor(z_dir)
+
+    return new_boxes
+
 
 # reverse box rotation (input 1 by 12 tensor)
+def unrotate_boxes(boxes):
+    new_boxes = []
+    for box in boxes:
+        if isinstance(box,int):
+            new_boxes.append(box)
+            continue
+        if len(box.shape) == 1:
+            box = box.unsqueeze(0)
+        new_box = unrotate_box(box)
+        new_boxes.append(new_box)
+    return new_boxes
+
 def unrotate_box(box):
     new_box = torch.zeros([1, 12])
     # rotate center vector
@@ -147,8 +202,8 @@ def unrotate_box(box):
     # re-compute principal directions
     dir_1 = new_box[0, 6:9]
     dir_2 = new_box[0, 9:]
-    dir_1 = dir_1 / np.linalg.norm(dir_1)
-    dir_2 = dir_2 / np.linalg.norm(dir_2)
+    dir_1 = dir_1.numpy() / np.linalg.norm(dir_1)
+    dir_2 = dir_2.numpy() / np.linalg.norm(dir_2)
     dir_3 = np.cross(dir_1, dir_2)
     dir_3 = dir_3 / np.linalg.norm(dir_3)
 

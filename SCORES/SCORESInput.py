@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree, unrotate_boxes
+from grassdata import GRASSDataset, Tree, unrotate_boxes, rotate_boxes_only
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -85,6 +85,75 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names):
 
     return results
 
+def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
+    results = []
+    for box_i in range(len(boxes)):
+        vertices = []
+        faces = []
+        obj_name = obj_names[box_i]
+        v_num = 0
+        for name in obj_name:
+            with open(os.path.join('../../partNet_objs/', name), 'r') as f:
+                lines = f.readlines()
+            t = 0
+            for line in lines:
+                if line[0] != 'v' and line[0] != 'f':
+                    continue
+                line = line.strip('\n')
+                items = line.split(' ')
+                if items[0] == 'v':
+                    vertices.append((float(items[1]), float(items[2]), float(items[3])))
+                    t += 1
+                if items[0] == 'f':
+                    faces.append([int(items[1])+v_num, int(items[2])+v_num, int(items[3])+v_num])
+            v_num += t
+
+        gtbox = gtboxs[box_i].cpu().numpy().squeeze()
+        gtCenter = gtbox[0:3][np.newaxis, ...].T
+        gtlengths = gtbox[3:6]
+        gtdir_1 = gtbox[6:9]
+        gtdir_2 = gtbox[9:12]
+        gtdir_1 = gtdir_1/LA.norm(gtdir_1)
+        gtdir_2 = gtdir_2/LA.norm(gtdir_2)
+        gtdir_3 = np.cross(gtdir_1, gtdir_2)
+        # gtdir_3 = gtdir_3/LA.norm(gtdir_3)
+
+
+        predbox = boxes[box_i].cpu().numpy().squeeze()
+        predCenter = predbox[0:3][np.newaxis, ...].T
+        predlengths = predbox[3:6]
+        preddir_1 = predbox[6:9]
+        preddir_2 = predbox[9:12]
+        preddir_1 = preddir_1/LA.norm(preddir_1)
+        preddir_2 = preddir_2/LA.norm(preddir_2)
+        preddir_3 = np.cross(preddir_1, preddir_2)
+        # preddir_3 = preddir_3/LA.norm(preddir_3)
+
+
+        scale = predlengths / gtlengths
+        scale = np.array([[scale[2], 0, 0], [0, scale[0], 0], [0, 0, scale[1]]])
+        x = np.array(vertices).T
+        A = np.array([gtdir_1, gtdir_2, gtdir_3])
+        B = np.array([preddir_1, preddir_2, preddir_3])
+        B = B.T
+        y = x - gtCenter
+        y = np.dot(scale,y)
+        y = np.dot(A,y)
+        y = np.dot(B,y)
+        y = y + predCenter
+        # y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
+        x = y.T
+        vertices = []
+        for i in range(x.shape[0]):
+            vertices.append(x[i])
+        for i in range(len(faces)):
+            temp = faces[i][0]
+            faces[i][0] = faces[i][1]
+            faces[i][1] = temp
+        results.append((vertices, faces))
+
+    return results
+
 
 def saveOBJ(obj_names, outfilename, results):
     cmap = plt.get_cmap('jet_r')
@@ -102,39 +171,39 @@ def saveOBJ(obj_names, outfilename, results):
         offset += len(vertices)
     f.close()
 
-# def alignBoxAndRender(gtBoxes, predBoxes, boxes_type, obj_names, outfilename):
-#     results = renderBoxes2mesh(gtBoxes, boxes_type, obj_names)
-#     for i in range(len(results)):
-#         gtbox = gtBoxes[i].cpu().numpy().squeeze()
-#         gtCenter = gtbox[0:3][np.newaxis, ...].T
-#         gtlengths = gtbox[3:6]
-#         gtdir_1 = gtbox[6:9]
-#         gtdir_2 = gtbox[9:12]
-#         gtdir_1 = gtdir_1/LA.norm(gtdir_1)
-#         gtdir_2 = gtdir_2/LA.norm(gtdir_2)
-#         gtdir_3 = np.cross(gtdir_1, gtdir_2)
-#
-#         predbox = predBoxes[i].cpu().numpy().squeeze()
-#         predCenter = predbox[0:3][np.newaxis, ...].T
-#         predlengths = predbox[3:6]
-#         preddir_1 = predbox[6:9]
-#         preddir_2 = predbox[9:12]
-#         preddir_1 = preddir_1/LA.norm(preddir_1)
-#         preddir_2 = preddir_2/LA.norm(preddir_2)
-#         preddir_3 = np.cross(preddir_1, preddir_2)
-#
-#         scale = predlengths / gtlengths
-#         scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
-#         x = np.array(results[i][0]).T
-#         A = np.array([gtdir_1, gtdir_2, gtdir_3])
-#         B = np.array([preddir_1, preddir_2, preddir_3])
-#         B = B.T
-#         y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
-#         x = y.T
-#         for t in range(len(results[i][0])):
-#             results[i][0][t] = x[t]
-#     saveOBJ(obj_names, outfilename, results)
-#
+def alignBoxAndRender(gtBoxes, predBoxes, boxes_type, obj_names, outfilename):
+    results = renderBoxes2mesh(gtBoxes, boxes_type, obj_names)
+    for i in range(len(results)):
+        gtbox = gtBoxes[i].cpu().numpy().squeeze()
+        gtCenter = gtbox[0:3][np.newaxis, ...].T
+        gtlengths = gtbox[3:6]
+        gtdir_1 = gtbox[6:9]
+        gtdir_2 = gtbox[9:12]
+        gtdir_1 = gtdir_1/LA.norm(gtdir_1)
+        gtdir_2 = gtdir_2/LA.norm(gtdir_2)
+        gtdir_3 = np.cross(gtdir_1, gtdir_2)
+
+        predbox = predBoxes[i].cpu().numpy().squeeze()
+        predCenter = predbox[0:3][np.newaxis, ...].T
+        predlengths = predbox[3:6]
+        preddir_1 = predbox[6:9]
+        preddir_2 = predbox[9:12]
+        preddir_1 = preddir_1/LA.norm(preddir_1)
+        preddir_2 = preddir_2/LA.norm(preddir_2)
+        preddir_3 = np.cross(preddir_1, preddir_2)
+
+        scale = predlengths / gtlengths
+        scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
+        x = np.array(results[i][0]).T
+        A = np.array([gtdir_1, gtdir_2, gtdir_3])
+        B = np.array([preddir_1, preddir_2, preddir_3])
+        B = B.T
+        y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
+        x = y.T
+        for t in range(len(results[i][0])):
+            results[i][0][t] = x[t]
+    saveOBJ(obj_names, outfilename, results)
+
 
 
 def tryPlot():
@@ -651,8 +720,10 @@ org_tree1 = grassdataset.orgTrees[1]
 new_tree2 = grassdataset[7]
 org_tree2 = grassdataset.orgTrees[7]
 
-allnewboxes1, _, allobjs = decode_structure(new_tree1.root)
-_, allcopyBoxes1, _ = decode_structure(org_tree1.root)
+allnewboxes1, allcopyBoxes1, allobjs = decode_structure(new_tree1.root)
+# _, allcopyBoxes1, _ = decode_structure(org_tree1.root)
+allnewboxes1 = unrotate_boxes(allnewboxes1)
+allcopyBoxes1 = unrotate_boxes(allcopyBoxes1)
 
 showGenshape(allnewboxes1)
 boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
@@ -660,8 +731,10 @@ boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 saveOBJ(allobjs,'testObj_A.OBJ' , renderBoxes2mesh(allnewboxes1,allcopyBoxes1,allobjs))
 # alignBoxAndRender(allnewboxes, allnewboxes, allnewboxes, allobjs, 'testObj_A.OBJ')
 
-allnewboxes2, _, allobjs = decode_structure(new_tree2.root)
-_, allcopyBoxes2, _ = decode_structure(org_tree2.root)
+allnewboxes2, allcopyBoxes2, allobjs = decode_structure(new_tree2.root)
+# _, allcopyBoxes2, _ = decode_structure(org_tree2.root)
+allnewboxes2 = unrotate_boxes(allnewboxes2)
+allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
 
 showGenshape(allnewboxes2)
 boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
@@ -676,8 +749,6 @@ syms_A = [syms1[i] for i in ids]
 labels_A = [labels1[i] for i in ids]
 objs_A = [objs1[i] for i in ids]
 boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
-print('Boxes A:')
-showGenshape(boxes_A)
 
 # select boxes with labels 2 and 3 from tree 2
 ids = [i for i in range(len(labels2)) if labels2[i] in [2, 3]]
@@ -687,8 +758,6 @@ labels_B = [labels2[i] for i in ids]
 objs_B = [objs2[i] for i in ids]
 
 boxes_B, syms_B, labels_B, objs_B = reshuffle(boxes_B, syms_B, labels_B, objs_B)
-print('Boxes B:')
-showGenshape(boxes_B)
 
 saveMats(boxes_A, syms_A, 'test_one_shape', 'A')
 saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
@@ -700,10 +769,9 @@ saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
 allTestData = SCORESTest('test_one_shape')
 testFile = allTestData[0]
 originalNodes = testFile.leves
-input_boxes, copyBoxes,idxs = testVQContext.render_node_to_boxes(originalNodes)
+input_boxes, copyBoxes, gtTypeBoxes, idxs = testVQContext.render_node_to_boxes(originalNodes)
 input_boxes = unrotate_boxes(input_boxes)
 copyBoxes = unrotate_boxes(copyBoxes)
-
 allObjs = []
 for index in idxs:
     index = int(index.item())
@@ -713,24 +781,20 @@ for index in idxs:
         allObjs.append(objs_A[index])
 
 saveOBJ(allobjs,'sampled_before.OBJ' , renderBoxes2mesh(input_boxes,copyBoxes,allobjs))
-
-print('Input Boxes:')
-draw3dOBB.showGenshape(torch.cat(input_boxes, 0).numpy())
-
+showGenshape(input_boxes)
 
 mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
-allBoxes, copyBoxes ,idxs = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
 
-output_boxes = unrotate_boxes(allBoxes[16])
-copyBoxes = unrotate_boxes(copyBoxes)
+for i,boxes in enumerate(allBoxes):
+    output_boxes = unrotate_boxes(boxes)
+    if i == len(allBoxes)-1:
+        showGenshape(output_boxes)
+    # alignBoxAndRender(copyBoxes, output_boxes, gtTypeBoxes, allobjs, 'sampled_after_{}.OBJ'.format(i))
+    saveOBJ(allobjs,'sampled_after_{}.OBJ'.format(i) , renderBoxes2mesh_new(output_boxes,copyBoxes,allobjs))
 
-saveOBJ(allobjs,'sampled_after.OBJ' , renderBoxes2mesh(output_boxes,copyBoxes,allobjs))
-
-
-
-draw3dOBB.showGenshape(torch.cat(allBoxes[16], 0).numpy())
 
 # %%
 #
