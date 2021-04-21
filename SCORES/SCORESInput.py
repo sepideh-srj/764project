@@ -67,7 +67,7 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names):
 
 
             scale = predlengths / gtlengths
-            scale = np.array([[scale[0], 0, 0], [0, scale[1], 0], [0, 0, scale[2]]])
+            scale = np.array([[scale[2], 0, 0], [0, scale[0], 0], [0, 0, scale[1]]])
             x = np.array(vertices).T
             A = np.array([gtdir_1, gtdir_2, gtdir_3])
             B = np.array([preddir_1, preddir_2, preddir_3])
@@ -126,7 +126,7 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
         preddir_2 = predbox[9:12]
         preddir_1 = preddir_1/LA.norm(preddir_1)
         preddir_2 = preddir_2/LA.norm(preddir_2)
-        preddir_3 = np.cross(preddir_1, preddir_2)
+        preddir_3 = -np.cross(preddir_1, preddir_2)
         # preddir_3 = preddir_3/LA.norm(preddir_3)
 
 
@@ -136,12 +136,12 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
         A = np.array([gtdir_1, gtdir_2, gtdir_3])
         B = np.array([preddir_1, preddir_2, preddir_3])
         B = B.T
-        y = x - gtCenter
-        y = np.dot(scale,y)
-        y = np.dot(A,y)
-        y = np.dot(B,y)
-        y = y + predCenter
-        # y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
+        # y = x - gtCenter
+        # y = np.dot(scale,y)
+        # y = np.dot(A,y)
+        # y = np.dot(B,y)
+        # y = y + predCenter
+        y = scale.dot(B).dot(A).dot(x-gtCenter)+predCenter
         x = y.T
         vertices = []
         for i in range(x.shape[0]):
@@ -715,35 +715,29 @@ dir_syms = '../../partNet_syms/Chair'
 dir_obj = '../../partNet_objs'
 grassdataset = GRASSDataset(dir_syms,dir_obj,10)
 
-new_tree1 = grassdataset[1]
-org_tree1 = grassdataset.orgTrees[1]
-new_tree2 = grassdataset[7]
-org_tree2 = grassdataset.orgTrees[7]
+new_tree1 = grassdataset[5]
+new_tree2 = grassdataset[6]
 
 allnewboxes1, allcopyBoxes1, allobjs = decode_structure(new_tree1.root)
-# _, allcopyBoxes1, _ = decode_structure(org_tree1.root)
+showGenshape(allnewboxes1)
 allnewboxes1 = unrotate_boxes(allnewboxes1)
 allcopyBoxes1 = unrotate_boxes(allcopyBoxes1)
 
-showGenshape(allnewboxes1)
 boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 
 saveOBJ(allobjs,'testObj_A.OBJ' , renderBoxes2mesh(allnewboxes1,allcopyBoxes1,allobjs))
-# alignBoxAndRender(allnewboxes, allnewboxes, allnewboxes, allobjs, 'testObj_A.OBJ')
 
 allnewboxes2, allcopyBoxes2, allobjs = decode_structure(new_tree2.root)
-# _, allcopyBoxes2, _ = decode_structure(org_tree2.root)
+showGenshape(allnewboxes2)
 allnewboxes2 = unrotate_boxes(allnewboxes2)
 allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
-
 showGenshape(allnewboxes2)
 boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
 
 saveOBJ(allobjs, 'testObj_B.OBJ', renderBoxes2mesh(allnewboxes2,allcopyBoxes2,allobjs))
-# alignBoxAndRender(allnewboxes, allnewboxes, allnewboxes, allobjs, 'testObj_B.OBJ')
 
 # select boxes with labels 0 and 1 from tree 1
-ids = [i for i in range(len(labels1)) if labels1[i] in [0, 1]]
+ids = [i for i in range(len(labels1)) if labels1[i] in [3, 1]]
 boxes_A = [boxes1[i] for i in ids]
 syms_A = [syms1[i] for i in ids]
 labels_A = [labels1[i] for i in ids]
@@ -751,7 +745,7 @@ objs_A = [objs1[i] for i in ids]
 boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
 
 # select boxes with labels 2 and 3 from tree 2
-ids = [i for i in range(len(labels2)) if labels2[i] in [2, 3]]
+ids = [i for i in range(len(labels2)) if labels2[i] in [2, 0]]
 boxes_B = [boxes2[i] for i in ids]
 syms_B = [syms2[i] for i in ids]
 labels_B = [labels2[i] for i in ids]
@@ -763,7 +757,6 @@ saveMats(boxes_A, syms_A, 'test_one_shape', 'A')
 saveMats(boxes_B, syms_B, 'test_one_shape', 'B')
 
 
-
 # %%
 # Run scores on the new data
 allTestData = SCORESTest('test_one_shape')
@@ -772,6 +765,8 @@ originalNodes = testFile.leves
 input_boxes, copyBoxes, gtTypeBoxes, idxs = testVQContext.render_node_to_boxes(originalNodes)
 input_boxes = unrotate_boxes(input_boxes)
 copyBoxes = unrotate_boxes(copyBoxes)
+showGenshape(input_boxes)
+
 allObjs = []
 for index in idxs:
     index = int(index.item())
@@ -780,20 +775,37 @@ for index in idxs:
     else:
         allObjs.append(objs_A[index])
 
-saveOBJ(allobjs,'sampled_before.OBJ' , renderBoxes2mesh(input_boxes,copyBoxes,allobjs))
-showGenshape(input_boxes)
+saveOBJ(allObjs,'sampled_before.OBJ' , renderBoxes2mesh(input_boxes,copyBoxes,allObjs))
 
 mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
-allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+# allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
+iteration = 30
+for i in range(iteration):
+    nodes_ = testVQContext.oneIterMerge(mergeNetFix, testFile)
+    boxes_, _, _, idxs_ = testVQContext.render_node_to_boxes(originalNodes)
 
-for i,boxes in enumerate(allBoxes):
-    output_boxes = unrotate_boxes(boxes)
-    if i == len(allBoxes)-1:
+    allObjs_ = []
+    for index in idxs_:
+        index = int(index.item())
+        if index >= 10000:
+            allObjs_.append(objs_B[index - 10000])
+        else:
+            allObjs_.append(objs_A[index])
+
+    copyBoxes_ = []
+    for index in idxs_:
+        index = int(index.item())
+        index_loc = idxs.index(index)
+        copyBoxes_.append(copyBoxes[index_loc])
+
+    output_boxes = unrotate_boxes(boxes_)
+    if i == iteration-1:
         showGenshape(output_boxes)
     # alignBoxAndRender(copyBoxes, output_boxes, gtTypeBoxes, allobjs, 'sampled_after_{}.OBJ'.format(i))
-    saveOBJ(allobjs,'sampled_after_{}.OBJ'.format(i) , renderBoxes2mesh_new(output_boxes,copyBoxes,allobjs))
+    print(len(allObjs_),len(allObjs_),len(copyBoxes_))
+    saveOBJ(allObjs,'sampled_after_{}.OBJ'.format(i) , renderBoxes2mesh_new(output_boxes,copyBoxes_,allObjs_))
 
 
 # %%
