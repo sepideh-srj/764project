@@ -713,7 +713,7 @@ def reshuffle(boxes, syms, labels, objs):
 # load data from database
 dir_syms = '../../partNet_syms/Chair'
 dir_obj = '../../partNet_objs'
-grassdataset = GRASSDataset(dir_syms,dir_obj,10)
+grassdataset = GRASSDataset(dir_syms,dir_obj,models_num=10, index=None)
 
 new_tree1 = grassdataset[5]
 new_tree2 = grassdataset[6]

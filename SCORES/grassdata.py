@@ -223,23 +223,51 @@ def unrotate_box(box):
 
 
 class GRASSDataset(data.Dataset,):
-    def __init__(self, dir_syms, dir_objs, models_num=0, transform=None):
+    def __init__(self, dir_syms, dir_objs, models_num=0, transform=None, index = None):
         self.dir = dir_syms
         num_examples = len(os.listdir(os.path.join(dir_syms, 'ops')))
         self.transform = transform
         self.trees = []
         self.Ids = []
         self.orgTrees = []
+        if index ==None:
+            for i in range(models_num):
+                boxes = torch.from_numpy(loadmat(os.path.join(dir_syms, 'boxes', '%d.mat' % (i+1)))['box']).t().float()
+                ops = torch.from_numpy(loadmat(os.path.join(dir_syms, 'ops', '%d.mat' % (i+1)))['op']).int()
+                syms = torch.from_numpy(loadmat(os.path.join(dir_syms, 'syms', '%d.mat' % (i+1)))['sym']).t().float()
+                labels = torch.from_numpy(loadmat(os.path.join(dir_syms, 'labels', '%d.mat' % (i+1)))['label']).int()
+                shapeId = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['shapename'].item()
+                objcorrespondence = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['cell_boxs_correspond_objSerialNumber'][0]
 
-        for i in range(models_num):
-            boxes = torch.from_numpy(loadmat(os.path.join(dir_syms, 'boxes', '%d.mat' % (i+1)))['box']).t().float()
-            ops = torch.from_numpy(loadmat(os.path.join(dir_syms, 'ops', '%d.mat' % (i+1)))['op']).int()
-            syms = torch.from_numpy(loadmat(os.path.join(dir_syms, 'syms', '%d.mat' % (i+1)))['sym']).t().float()
-            labels = torch.from_numpy(loadmat(os.path.join(dir_syms, 'labels', '%d.mat' % (i+1)))['label']).int()
-            shapeId = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['shapename'].item()
-            objcorrespondence = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (i+1)))['cell_boxs_correspond_objSerialNumber'][0]
+                json_file = open(os.path.join(dir_objs,shapeId,'result_after_merging.json'), 'r')
+                json_content = json.load(json_file)
+                json_file.close()
+                originalobjsloc = json_content[0]['objs']
 
-            json_file = open(os.path.join(dir_objs,shapeId,'result_after_merging.json'), 'r')
+                objnames = []
+                for box in objcorrespondence:
+                    box_objs = []
+                    for index in box[0]:
+                        box_objs.append(shapeId+'/objs/'+originalobjsloc[index-1]+'.obj')
+                    objnames.append(box_objs)
+
+                new_boxes1, new_syms1 = rotate_boxes(boxes, syms)
+                orgTree = Tree(boxes, ops.clone(), syms, labels.clone(), objnames.copy())
+                tree = Tree(new_boxes1, ops, new_syms1, labels, objnames)
+
+                self.trees.append(tree)
+                self.orgTrees.append(orgTree)
+                self.Ids.append(shapeId)
+        else:
+            boxes = torch.from_numpy(loadmat(os.path.join(dir_syms, 'boxes', '%d.mat' % (index)))['box']).t().float()
+            ops = torch.from_numpy(loadmat(os.path.join(dir_syms, 'ops', '%d.mat' % (index)))['op']).int()
+            syms = torch.from_numpy(loadmat(os.path.join(dir_syms, 'syms', '%d.mat' % (index)))['sym']).t().float()
+            labels = torch.from_numpy(loadmat(os.path.join(dir_syms, 'labels', '%d.mat' % (index)))['label']).int()
+            shapeId = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (index)))['shapename'].item()
+            objcorrespondence = loadmat(os.path.join(dir_syms, 'part mesh indices', '%d.mat' % (index)))[
+                'cell_boxs_correspond_objSerialNumber'][0]
+
+            json_file = open(os.path.join(dir_objs, shapeId, 'result_after_merging.json'), 'r')
             json_content = json.load(json_file)
             json_file.close()
             originalobjsloc = json_content[0]['objs']
@@ -248,7 +276,7 @@ class GRASSDataset(data.Dataset,):
             for box in objcorrespondence:
                 box_objs = []
                 for index in box[0]:
-                    box_objs.append(shapeId+'/objs/'+originalobjsloc[index-1]+'.obj')
+                    box_objs.append(shapeId + '/objs/' + originalobjsloc[index - 1] + '.obj')
                 objnames.append(box_objs)
 
             new_boxes1, new_syms1 = rotate_boxes(boxes, syms)
@@ -258,9 +286,8 @@ class GRASSDataset(data.Dataset,):
             self.trees.append(tree)
             self.orgTrees.append(orgTree)
             self.Ids.append(shapeId)
-
-    def __getitem__(self, index):
-        tree = self.trees[index]
+    def __getitem__(self, i):
+        tree = self.trees[i]
         return tree
 
     def __len__(self):
