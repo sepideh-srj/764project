@@ -353,7 +353,7 @@ def render_node_to_boxes(nodes):
 
 def oneIterMerge(model, testdata):
     if len(testdata.leves) < 4:    
-        patches = testdata.sampleKsubstructure(len(testdata.leves))
+        patches = testdata.sampleKsubstructure(len(testdata.leves)-1)
     else:
         patches = testdata.sampleKsubstructure(4)
     vqSum = 0
