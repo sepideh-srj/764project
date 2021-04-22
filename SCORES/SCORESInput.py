@@ -709,17 +709,82 @@ def reshuffle(boxes, syms, labels, objs):
             new_objs = [obj] + new_objs
     return new_boxes, new_syms, new_labels, new_objs
 
+def computeCorners(box):
+    center = box[0,0:3]
+    lengths = box[0,3:6]
+    dir_1 = box[0,6:9]
+    dir_2 = box[0,9:]
+
+    dir_1 = dir_1 / LA.norm(dir_1)
+    dir_2 = dir_2 / LA.norm(dir_2)
+    dir_3 = np.cross(dir_1, dir_2)
+    dir_3 = dir_3 / LA.norm(dir_3)
+    cornerpoints = np.zeros([8,3])
+
+    d1 = 0.5 * lengths[0] * dir_1
+    d2 = 0.5 * lengths[1] * dir_2
+    d3 = 0.5 * lengths[2] * dir_3
+
+    cornerpoints[0][:] = center - d1 - d2 - d3
+    cornerpoints[1][:] = center - d1 + d2 - d3
+    cornerpoints[2][:] = center + d1 - d2 - d3
+    cornerpoints[3][:] = center + d1 + d2 - d3
+    cornerpoints[4][:] = center - d1 - d2 + d3
+    cornerpoints[5][:] = center - d1 + d2 + d3
+    cornerpoints[6][:] = center + d1 - d2 + d3
+    cornerpoints[7][:] = center + d1 + d2 + d3
+
+    return cornerpoints
+
+def mergeBoxes(boxes):
+    out_box = torch.zeros([12])
+    max_x = 0
+    min_x = 0
+    max_y = 0
+    min_y = 0
+    max_z = 0
+    min_z = 0
+    for box in boxes:
+        corners = computeCorners(box)
+        for d in range(corners.shape[0]):
+            point = corners[d,:]
+            if point[0] > max_x:
+                max_x = point[0]
+            if point[0] < min_x:
+                min_x = point[0]
+            if point[1] > max_y:
+                max_y = point[1]
+            if point[1] < min_y:
+                min_y = point[1]
+            if point[2] > max_z:
+                max_z = point[1]
+            if point[2] < min_z:
+                min_z = point[2]
+    out_box[0] = 0.5*(max_x+min_x)
+    out_box[1] = 0.5*(max_y+min_y)
+    out_box[2] = 0.5*(max_z+min_z)
+    out_box[3] = 0.5*(max_y-min_y)
+    out_box[4] = 0.5*(max_z-min_z)
+    out_box[5] = 0.5*(max_x+min_x)
+    out_box[6] = 0
+    out_box[7] = 1
+    out_box[8] = 0
+    out_box[9] = 0
+    out_box[10] = 0
+    out_box[11] = 1
+    return out_box
 
 # load data from database
 dir_syms = '../../partNet_syms/Chair'
 dir_obj = '../../partNet_objs'
-grassdataset = GRASSDataset(dir_syms,dir_obj,models_num=10, index=None)
+grassdataset1 = GRASSDataset(dir_syms,dir_obj,models_num=10, index=1392)
+grassdataset2 = GRASSDataset(dir_syms,dir_obj,models_num=10, index=3453)
 
-new_tree1 = grassdataset[5]
-new_tree2 = grassdataset[6]
+new_tree1 = grassdataset1[0]
+new_tree2 = grassdataset2[0]
 
 allnewboxes1, allcopyBoxes1, allobjs = decode_structure(new_tree1.root)
-showGenshape(allnewboxes1)
+#showGenshape(allnewboxes1)
 allnewboxes1 = unrotate_boxes(allnewboxes1)
 allcopyBoxes1 = unrotate_boxes(allcopyBoxes1)
 
@@ -728,28 +793,51 @@ boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
 saveOBJ(allobjs,'testObj_A.OBJ' , renderBoxes2mesh(allnewboxes1,allcopyBoxes1,allobjs))
 
 allnewboxes2, allcopyBoxes2, allobjs = decode_structure(new_tree2.root)
-showGenshape(allnewboxes2)
+#showGenshape(allnewboxes2)
 allnewboxes2 = unrotate_boxes(allnewboxes2)
 allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
-showGenshape(allnewboxes2)
+#showGenshape(allnewboxes2)
 boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
 
 saveOBJ(allobjs, 'testObj_B.OBJ', renderBoxes2mesh(allnewboxes2,allcopyBoxes2,allobjs))
 
-# select boxes with labels 0 and 1 from tree 1
-ids = [i for i in range(len(labels1)) if labels1[i] in [3, 1]]
+# 0 = BACK
+# 1 = SEAT
+# 2 = LEG
+# 3 = ARM
+
+# select boxes from tree 1
+ids = [i for i in range(len(labels1)) if labels1[i] in [1,3]] #3,1
 boxes_A = [boxes1[i] for i in ids]
 syms_A = [syms1[i] for i in ids]
 labels_A = [labels1[i] for i in ids]
 objs_A = [objs1[i] for i in ids]
 boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
 
-# select boxes with labels 2 and 3 from tree 2
-ids = [i for i in range(len(labels2)) if labels2[i] in [2, 0]]
-boxes_B = [boxes2[i] for i in ids]
-syms_B = [syms2[i] for i in ids]
-labels_B = [labels2[i] for i in ids]
-objs_B = [objs2[i] for i in ids]
+# select boxes from tree 2
+mergeLegs = True
+if mergeLegs:
+    ids = [i for i in range(len(labels2)) if labels2[i] in [0]]
+    boxes_B = [boxes2[i] for i in ids]
+    syms_B = [syms2[i] for i in ids]
+    labels_B = [labels2[i] for i in ids]
+    objs_B = [objs2[i] for i in ids]
+
+    all_boxesB, all_labelsB = decode_structure_with_labels(new_tree2.root)  # I need all boxes after symmetry here to compute the correct encompassing box
+                                                                            # but some boxes appear to be [1,12] and some are [12], need to fix to have all [1,12] dim
+    legIds = [i for i in range(len(all_labelsB)) if all_labelsB[i] == 2]
+    legBoxes = [all_boxesB[i] for i in legIds]
+    legBox = mergeBoxes(legBoxes)
+    boxes_B.append(legBox)
+    syms_B.append(torch.ones(8)*10)
+    labels_B.append(torch.t(2))
+    objs_B.append(objs_B[-1]) # will need to change this to make rendering work
+else:
+    ids = [i for i in range(len(labels2)) if labels2[i] in [0,2]]
+    boxes_B = [boxes2[i] for i in ids]
+    syms_B = [syms2[i] for i in ids]
+    labels_B = [labels2[i] for i in ids]
+    objs_B = [objs2[i] for i in ids]
 
 boxes_B, syms_B, labels_B, objs_B = reshuffle(boxes_B, syms_B, labels_B, objs_B)
 
