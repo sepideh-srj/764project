@@ -768,7 +768,7 @@ id_list = [653, 18, 734, 1791, 2207, 3663, 4903, 2428, 722, 4294] # set C
 # 2 = LEG
 # 3 = ARM
 
-back_index = 4903 #np.random.choice(id_list)
+back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list)
 arm_index = np.random.choice(id_list)
