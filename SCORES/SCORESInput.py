@@ -39,7 +39,9 @@ def computeTransformMatrix(gtbox, predbox):
 
     A = np.array([gtlengths[0]*gtdir_1, gtlengths[1]*gtdir_2, gtlengths[2]*gtdir_3]).T
     B = np.array([predlengths[0]*preddir_1, predlengths[1]*preddir_2, predlengths[2]*preddir_3]).T
+
     M = np.matmul(B, LA.inv(A))
+
     return M
 
 def renderBoxes2mesh(boxes, gtboxs, obj_names):
@@ -101,6 +103,8 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
         for name in obj_name:
             if name == 'LEG_OBJ':
                 file_path = 'legObj.obj'
+            elif name == 'BACK_OBJ':
+                file_path = 'backObj.obj'
             else:    
                 file_path = os.path.join('data/PartNet_Chairs/Chair_parts/', name)
             with open(file_path, 'r') as f:
@@ -757,56 +761,87 @@ def mergeBoxes(boxes):
     return out_box
 
 
-mergeLegs = True
-
-# load data from database
-dir_syms = 'data/Chair'
-dir_obj = 'data/PartNet_Chairs/Chair_parts'
-new_tree1 = GRASSDataset(dir_syms,dir_obj,models_num=10, index=1792)[0] # arms and seat
-new_tree2 = GRASSDataset(dir_syms,dir_obj,models_num=10, index=2234)[0] # back and legs
-
-allnewboxes1, allcopyBoxes1, allobjs1 = decode_structure(new_tree1.root)
-#showGenshape(allnewboxes1)
-allnewboxes1 = unrotate_boxes(allnewboxes1)
-allcopyBoxes1 = unrotate_boxes(allcopyBoxes1)
-showGenshape(allnewboxes1)
-
-boxes1, syms1, labels1, objs1 = decode_boxes(new_tree1.root)
-
-saveOBJ(allobjs1,'testObj_A.OBJ' , renderBoxes2mesh(allnewboxes1,allcopyBoxes1,allobjs1))
-
-allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree2.root)
-#showGenshape(allnewboxes2)
-allnewboxes2 = unrotate_boxes(allnewboxes2)
-allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
-showGenshape(allnewboxes2)
-boxes2, syms2, labels2, objs2 = decode_boxes(new_tree2.root)
-
-saveOBJ(allobjs2, 'testObj_B.OBJ', renderBoxes2mesh(allnewboxes2,allcopyBoxes2,allobjs2))
+id_list = [653, 18, 734, 1791, 2207, 3663, 4903, 2428, 722, 4294] # set C
 
 # 0 = BACK
 # 1 = SEAT
 # 2 = LEG
 # 3 = ARM
 
-# select boxes from tree 1
-ids = [i for i in range(len(labels1)) if labels1[i] in [1,3]] #3,1
-boxes_A = [boxes1[i] for i in ids]
-syms_A = [syms1[i] for i in ids]
-labels_A = [labels1[i] for i in ids]
-objs_A = [objs1[i] for i in ids]
-boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
+back_index = 4903 #np.random.choice(id_list)
+seat_index = np.random.choice(id_list)
+leg_index = np.random.choice(id_list)
+arm_index = np.random.choice(id_list)
 
-# select boxes from tree 2
+print(back_index, seat_index, leg_index, arm_index)
+mergeLegs = True
+mergeBack = False
+include_arms = False
 
+# load data from database
+dir_syms = 'data/Chair'
+dir_obj = 'data/PartNet_Chairs/Chair_parts'
+
+# sample back
+new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=back_index)[0]
+boxes, syms, labels, objs = decode_boxes(new_tree.root)
+if mergeBack:
+    allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
+    all_boxesA, all_labelsA = decode_structure_with_labels(new_tree.root)
+    allnewboxes2 = unrotate_boxes(allnewboxes2)
+    allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
+
+    backIds = [i for i in range(len(all_labelsA)) if all_labelsA[i] == 0]
+    backBoxes = [all_boxesA[i] for i in backIds] # rotated
+    unrotatedBackBoxes = [allnewboxes2[i] for i in backIds] # unrotated
+    backCopyBoxes = [allcopyBoxes2[i] for i in backIds] # unrotated
+    backObjs = [allobjs2[i] for i in backIds]
+    saveOBJ(backObjs, 'backObj.OBJ', renderBoxes2mesh(unrotatedBackBoxes,backCopyBoxes,backObjs))
+    
+    backBox = mergeBoxes(backBoxes)
+    boxes_A = [backBox]
+    syms_A = [torch.ones(8)*10]
+    labels_A = [torch.FloatTensor([0])]
+    objs_A = [['BACK_OBJ']]
+else:
+    ids = [i for i in range(len(labels)) if labels[i] == 0]
+    boxes_A = [boxes[i] for i in ids]
+    syms_A = [syms[i] for i in ids]
+    labels_A = [labels[i] for i in ids]
+    objs_A = [objs[i] for i in ids]
+
+# sample seat
+new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=seat_index)[0]
+boxes, syms, labels, objs = decode_boxes(new_tree.root)
+ids = [i for i in range(len(labels)) if labels[i] == 1]
+boxes_A.extend([boxes[i] for i in ids])
+syms_A.extend([syms[i] for i in ids])
+labels_A.extend([labels[i] for i in ids])
+objs_A.extend([objs[i] for i in ids])
+
+# sample arms
+if include_arms:
+    new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=arm_index)[0]
+    boxes, syms, labels, objs = decode_boxes(new_tree.root)
+    ids = [i for i in range(len(labels)) if labels[i] == 3] 
+    boxes_B = [boxes[i] for i in ids]
+    syms_B = [syms[i] for i in ids]
+    labels_B = [labels[i] for i in ids]
+    objs_B = [objs[i] for i in ids]
+else:
+    boxes_B = []
+    syms_B = []
+    labels_B = []
+    objs_B = []
+
+# sample legs
+new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=leg_index)[0]
+boxes, syms, labels, objs = decode_boxes(new_tree.root)
 if mergeLegs:
-    ids = [i for i in range(len(labels2)) if labels2[i] in [0]]
-    boxes_B = [boxes2[i] for i in ids]
-    syms_B = [syms2[i] for i in ids]
-    labels_B = [labels2[i] for i in ids]
-    objs_B = [objs2[i] for i in ids]
-
-    all_boxesB, all_labelsB = decode_structure_with_labels(new_tree2.root)
+    allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
+    all_boxesB, all_labelsB = decode_structure_with_labels(new_tree.root)
+    allnewboxes2 = unrotate_boxes(allnewboxes2)
+    allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
 
     legIds = [i for i in range(len(all_labelsB)) if all_labelsB[i] == 2]
     legBoxes = [all_boxesB[i] for i in legIds] # rotated
@@ -819,16 +854,15 @@ if mergeLegs:
     boxes_B.append(legBox)
     syms_B.append(torch.ones(8)*10)
     labels_B.append(torch.FloatTensor([2]))
-
-    # just need to make a temp OBJ here
     objs_B.append(['LEG_OBJ'])
 else:
-    ids = [i for i in range(len(labels2)) if labels2[i] in [0,2]]
-    boxes_B = [boxes2[i] for i in ids]
-    syms_B = [syms2[i] for i in ids]
-    labels_B = [labels2[i] for i in ids]
-    objs_B = [objs2[i] for i in ids]
+    ids = [i for i in range(len(labels)) if labels[i] == 2]
+    boxes_B.extend([boxes[i] for i in ids])
+    syms_B.extend([syms[i] for i in ids])
+    labels_B.extend([labels[i] for i in ids])
+    objs_B.extend([objs[i] for i in ids])
 
+boxes_A, syms_A, labels_A, objs_A = reshuffle(boxes_A, syms_A, labels_A, objs_A)
 boxes_B, syms_B, labels_B, objs_B = reshuffle(boxes_B, syms_B, labels_B, objs_B)
 
 saveMats(boxes_A, syms_A, 'test_one_shape', 'A')
