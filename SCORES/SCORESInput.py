@@ -762,20 +762,21 @@ def mergeBoxes(boxes):
 
 
 id_list = [653, 18, 734, 1791, 2207, 3663, 4903, 2428, 722, 4294] # set C
+back_list = [653, 18, 734, 1791, 2207, 3663, 2428, 722, 4294] #4903 has a bad box in back
 
 # 0 = BACK
 # 1 = SEAT
 # 2 = LEG
 # 3 = ARM
 
-back_index = np.random.choice(id_list)
+back_index = np.random.choice(back_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list)
 arm_index = np.random.choice(id_list)
 
 print(back_index, seat_index, leg_index, arm_index)
 mergeLegs = True
-mergeBack = False
+mergeBack = True
 include_arms = False
 
 # load data from database
