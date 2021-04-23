@@ -761,15 +761,18 @@ def mergeBoxes(boxes):
     return out_box
 
 
-id_list = [653, 18, 734, 1791, 2207, 3663, 4903, 2428, 722, 4294] # set C
-back_list = [653, 18, 734, 1791, 2207, 3663, 2428, 722, 4294] #4903 has a bad box in back
+id_list_A = [369, 175, 5540]
+id_list_B = [2999, 2150, 3492, 4474, 2160]
+id_list_C = [1919, 3366, 3521, 3204, 1131, 173, 3749, 2313, 5117, 1920]
 
 # 0 = BACK
 # 1 = SEAT
 # 2 = LEG
 # 3 = ARM
 
-back_index = np.random.choice(back_list)
+id_list = id_list_B
+
+back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list)
 arm_index = np.random.choice(id_list)
@@ -896,7 +899,7 @@ mergeNetFix = torch.load('SCORES/MergeNet_chair_demo_fix.pkl', map_location=lamb
 mergeNetFix = mergeNetFix.cpu()
 
 # allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
-iteration = 30
+iteration = 15
 for i in range(iteration):
     nodes_ = testVQContext.oneIterMerge(mergeNetFix, testFile)
     
