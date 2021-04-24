@@ -919,8 +919,8 @@ for i in range(iteration):
     
     # hack to prevent symmetry changes
     for node in nodes_:
-        if node.sym[0] < 1:
-            node.sym[0] = 1
+        if abs(node.sym[0]) < 1:
+            node.sym[0] = np.sign(node.sym[0])
     boxes_, _, _, idxs_ = testVQContext.render_node_to_boxes(originalNodes)
 
     allObjs_ = []
