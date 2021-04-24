@@ -19,6 +19,22 @@ import math
 
 ## Some function definitions for box decoding
 
+def findMaxY(box):
+    corners = computeCorners(box)
+    yMax = -100
+    for i in range(corners.shape[0]):
+        if corners[i,1] > yMax:
+            yMax = corners[i,1]
+    return yMax
+
+def findMinY(box):
+    corners = computeCorners(box)
+    yMin = 100
+    for i in range(corners.shape[0]):
+        if corners[i,1] < yMin:
+            yMin = corners[i,1]
+    return yMin
+
 def computeTransformMatrix(gtbox, predbox):
     gtlengths = gtbox[3:6]
     gtdir_1 = gtbox[6:9]
@@ -33,7 +49,7 @@ def computeTransformMatrix(gtbox, predbox):
     preddir_2 = predbox[9:12]
     preddir_1 = preddir_1/LA.norm(preddir_1)
     preddir_2 = preddir_2/LA.norm(preddir_2)
-    preddir_3 = np.cross(preddir_1, preddir_2)
+    preddir_3 = -np.cross(preddir_1, preddir_2)
     #preddir_3 = -np.cross(preddir_1, preddir_2)
     # preddir_3 = preddir_3/LA.norm(preddir_3)
 
@@ -786,7 +802,7 @@ id_list_C = [1919, 3366, 3521, 3204, 1131, 173, 3749, 2313, 5117, 1920]
 
 id_list = id_list_B
 
-back_index = np.random.choice(id_list)
+back_index = 3492 #np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list) #173
 arm_index = np.random.choice(id_list)
@@ -936,6 +952,26 @@ for i in range(iteration):
         index = int(index.item())
         index_loc = idxs.index(index)
         copyBoxes_.append(copyBoxes[index_loc])
+
+    allLabels_ = []
+    for index in idxs_:
+        index = int(index.item())
+        if index >= 10000:
+            allLabels_.append(labels_B[index - 10000])
+        else:
+            allLabels_.append(labels_A[index])
+
+    # cosmetic fix, align leg box with seat box
+    if mergeLegs:
+        leg_boxes = [boxes_[i] for i in range(len(boxes_)) if allLabels_[i] == 2]
+        seat_boxes = [boxes_[i] for i in range(len(boxes_)) if allLabels_[i] == 1]
+        if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
+            leg_box = leg_boxes[0]
+            seat_box = seat_boxes[0]
+            y_max_legs = findMaxY(leg_box)
+            y_min_seat = findMinY(seat_box)
+            y_max_seat = findMaxY(seat_box)
+            leg_box[0,1] = leg_box[0,1] - y_max_legs + y_min_seat + 0.4*(y_max_seat - y_min_seat)
 
     output_boxes = unrotate_boxes(boxes_)
     
