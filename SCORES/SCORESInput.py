@@ -260,30 +260,44 @@ def draw(ax, p, color):
     cornerpoints[6][:] = center + d1 - d2 + d3
     cornerpoints[7][:] = center + d1 + d2 + d3
 
+    use_alternative_colors = False
+    if use_alternative_colors:
+        cmap = plt.get_cmap('jet_r')
+        color1 = cmap(float(0) / 7)
+        color2 = cmap(float(4) / 7)
+        color3 = cmap(float(6) / 7)
+        # plot extra line from center to corner 1 to see box orientation
+        ax.plot([cornerpoints[0][0], center[0]], [cornerpoints[0][1], center[1]],
+            [cornerpoints[0][2], center[2]], c=color1)
+    else:
+        color1 = color
+        color2 = color
+        color3 = color
+
     ax.plot([cornerpoints[0][0], cornerpoints[1][0]], [cornerpoints[0][1], cornerpoints[1][1]],
-            [cornerpoints[0][2], cornerpoints[1][2]], c=color)
+            [cornerpoints[0][2], cornerpoints[1][2]], c=color2)
     ax.plot([cornerpoints[0][0], cornerpoints[2][0]], [cornerpoints[0][1], cornerpoints[2][1]],
-            [cornerpoints[0][2], cornerpoints[2][2]], c=color)
+            [cornerpoints[0][2], cornerpoints[2][2]], c=color1)
     ax.plot([cornerpoints[1][0], cornerpoints[3][0]], [cornerpoints[1][1], cornerpoints[3][1]],
-            [cornerpoints[1][2], cornerpoints[3][2]], c=color)
+            [cornerpoints[1][2], cornerpoints[3][2]], c=color1)
     ax.plot([cornerpoints[2][0], cornerpoints[3][0]], [cornerpoints[2][1], cornerpoints[3][1]],
-            [cornerpoints[2][2], cornerpoints[3][2]], c=color)
+            [cornerpoints[2][2], cornerpoints[3][2]], c=color2)
     ax.plot([cornerpoints[4][0], cornerpoints[5][0]], [cornerpoints[4][1], cornerpoints[5][1]],
-            [cornerpoints[4][2], cornerpoints[5][2]], c=color)
+            [cornerpoints[4][2], cornerpoints[5][2]], c=color2)
     ax.plot([cornerpoints[4][0], cornerpoints[6][0]], [cornerpoints[4][1], cornerpoints[6][1]],
-            [cornerpoints[4][2], cornerpoints[6][2]], c=color)
+            [cornerpoints[4][2], cornerpoints[6][2]], c=color1)
     ax.plot([cornerpoints[5][0], cornerpoints[7][0]], [cornerpoints[5][1], cornerpoints[7][1]],
-            [cornerpoints[5][2], cornerpoints[7][2]], c=color)
+            [cornerpoints[5][2], cornerpoints[7][2]], c=color1)
     ax.plot([cornerpoints[6][0], cornerpoints[7][0]], [cornerpoints[6][1], cornerpoints[7][1]],
-            [cornerpoints[6][2], cornerpoints[7][2]], c=color)
+            [cornerpoints[6][2], cornerpoints[7][2]], c=color2)
     ax.plot([cornerpoints[0][0], cornerpoints[4][0]], [cornerpoints[0][1], cornerpoints[4][1]],
-            [cornerpoints[0][2], cornerpoints[4][2]], c=color)
+            [cornerpoints[0][2], cornerpoints[4][2]], c=color3)
     ax.plot([cornerpoints[1][0], cornerpoints[5][0]], [cornerpoints[1][1], cornerpoints[5][1]],
-            [cornerpoints[1][2], cornerpoints[5][2]], c=color)
+            [cornerpoints[1][2], cornerpoints[5][2]], c=color3)
     ax.plot([cornerpoints[2][0], cornerpoints[6][0]], [cornerpoints[2][1], cornerpoints[6][1]],
-            [cornerpoints[2][2], cornerpoints[6][2]], c=color)
+            [cornerpoints[2][2], cornerpoints[6][2]], c=color3)
     ax.plot([cornerpoints[3][0], cornerpoints[7][0]], [cornerpoints[3][1], cornerpoints[7][1]],
-            [cornerpoints[3][2], cornerpoints[7][2]], c=color)
+            [cornerpoints[3][2], cornerpoints[7][2]], c=color3)
 
 
 def showGenshapes(genshapes):
@@ -774,7 +788,7 @@ id_list = id_list_B
 
 back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
-leg_index = np.random.choice(id_list)
+leg_index = np.random.choice(id_list) #173
 arm_index = np.random.choice(id_list)
 
 print(back_index, seat_index, leg_index, arm_index)

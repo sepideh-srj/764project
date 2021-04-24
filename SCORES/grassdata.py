@@ -190,6 +190,10 @@ def unrotate_box(box):
     new_box[0, 1] = box[0, 1]
     new_box[0, 2] = box[0, 0]
 
+    new_box[0, 3] = box[0, 3]
+    new_box[0, 4] = box[0, 4]
+    new_box[0, 5] = box[0, 5]
+
     # rotate principal directions
     new_box[0, 6] = -box[0, 8]
     new_box[0, 7] = box[0, 7]
@@ -199,6 +203,8 @@ def unrotate_box(box):
     new_box[0, 10] = box[0, 10]
     new_box[0, 11] = box[0, 9]
 
+
+    '''
     # re-compute principal directions
     dir_1 = new_box[0, 6:9]
     dir_2 = new_box[0, 9:]
@@ -218,7 +224,7 @@ def unrotate_box(box):
 
     new_box[0, 6:9] = torch.FloatTensor(y_dir)
     new_box[0, 9:12] = torch.FloatTensor(z_dir)
-
+    '''
     return new_box
 
 
