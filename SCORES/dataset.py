@@ -343,8 +343,18 @@ class Tree(object):
             self.leves[i].box = self.leves[i].original_box + noise
 
 
-def EqualSymPara(s1, s2):
-    if s1[0] is not s2[0]:
+def EqualSymPara(s1_, s2_):
+    if len(s1_.shape) == 2:
+        s1 = s1_.squeeze(0)
+    else:
+        s1 = s1_
+
+    if len(s2_.shape) == 2:
+        s2 = s2_.squeeze(0)
+    else:
+        s2 = s2_
+
+    if s1[0] != s2[0]:
         return False
     
     if s1[0] == -1:
