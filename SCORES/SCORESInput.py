@@ -908,7 +908,6 @@ if mergeLegs:
     legCopyBoxes = [allcopyBoxes2[i] for i in legIds] # unrotated
     legObjs = [allobjs2[i] for i in legIds]
     saveOBJ(legObjs, 'legObj.obj', renderBoxes2mesh(unrotatedLegBoxes,legCopyBoxes,legObjs))
-    showGenshape(legBoxes)
 
     legBox = mergeBoxes(legBoxes)
     boxes_B.append(legBox)
