@@ -821,7 +821,7 @@ id_list = id_list_C
 back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list)
-arm_index = 1920 #np.random.choice(id_list)
+arm_index = np.random.choice(id_list)
 
 # back_index = 4474
 # seat_index = 2150
@@ -1029,11 +1029,12 @@ for i in range(iteration):
             boxes = reparameterize(boxes, syms)
             allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
             all_boxesB, all_labelsB = decode_structure_with_labels(new_tree.root)
+            
             allnewboxes2 = unrotate_boxes(allnewboxes2)
             allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
-
+            
             armIds = [i for i in range(len(all_labelsB)) if all_labelsB[i] == 3]
-            armBoxes = [all_boxesB[i] for i in armIds] # rotated
+            armBoxes = [allnewboxes2[i] for i in armIds] # rotated
             unrotatedArmBoxes = [allnewboxes2[i] for i in armIds] # unrotated
             armCopyBoxes = [allcopyBoxes2[i] for i in armIds] # unrotated
             armObjs = [allobjs2[i] for i in armIds]
