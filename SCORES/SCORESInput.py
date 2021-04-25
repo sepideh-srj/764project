@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree, unrotate_boxes, rotate_boxes_only, reparameterize
+from grassdata import GRASSDataset, Tree, unrotate_boxes, rotate_boxes_only, reparameterize, rotate_boxes
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -32,9 +32,9 @@ def snapToGrid(box):
     for i in range(6):
         new_box[0,i] = box[0,i]
     for i in range(6,12):
-        if abs(box[0,i]-1) < 0.2:
+        if abs(box[0,i]-1) < 0.4:
             new_box[0,i] = 1
-        elif abs(box[0,i]) < 0.2:
+        elif abs(box[0,i]) < 0.4:
             new_box[0,i] = 0
         else:
             new_box[0,i] = box[0,i]
@@ -765,12 +765,12 @@ def computeCorners(box):
 
 def mergeBoxes(boxes):
     out_box = torch.zeros([1,12])
-    max_x = 0
-    min_x = 0
-    max_y = 0
-    min_y = 0
-    max_z = 0
-    min_z = 0
+    max_x = -100
+    min_x = 100
+    max_y = -100
+    min_y = 100
+    max_z = -100
+    min_z = 100
     for box in boxes:
         if len(box.shape) == 1:
             box = box.unsqueeze(0)
@@ -892,10 +892,18 @@ else:
 # sample legs
 new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=leg_index)[0]
 boxes, syms, labels, objs = decode_boxes(new_tree.root)
+if leg_index == 173:
+    boxes[1] = torch.FloatTensor([[0.0515, -0.4089, -0.00564, 0.4327, 0.1096, 0.1096,  0,1,0, 1,0,0]])
+
 boxes = reparameterize(boxes, syms)
 if mergeLegs:
     allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
     all_boxesB, all_labelsB = decode_structure_with_labels(new_tree.root)
+
+    if leg_index == 173:
+        allnewboxes2[1] = torch.FloatTensor([[0.0515, -0.4089, -0.00564, 0.4327, 0.1096, 0.1096,  0,1,0, 1,0,0]])
+        all_boxesB[1] = torch.FloatTensor([[0.0515, -0.4089, -0.00564, 0.4327, 0.1096, 0.1096,  0,1,0, 1,0,0]])
+
     allnewboxes2 = unrotate_boxes(allnewboxes2)
     allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
 
@@ -905,7 +913,7 @@ if mergeLegs:
     legCopyBoxes = [allcopyBoxes2[i] for i in legIds] # unrotated
     legObjs = [allobjs2[i] for i in legIds]
     saveOBJ(legObjs, 'legObj.obj', renderBoxes2mesh(unrotatedLegBoxes,legCopyBoxes,legObjs))
-    
+
     legBox = mergeBoxes(legBoxes)
     boxes_B.append(legBox)
     syms_B.append(torch.ones(8)*10)

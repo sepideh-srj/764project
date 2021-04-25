@@ -343,16 +343,24 @@ class Tree(object):
             self.leves[i].box = self.leves[i].original_box + noise
 
 
-def EqualSymPara(s1, s2):
+def EqualSymPara(s1_, s2_):
+    if len(s1_.shape) == 2:
+        s1 = s1_.squeeze(0)
+    else:
+        s1 = s1_
+
+    if len(s2_.shape) == 2:
+        s2 = s2_.squeeze(0)
+    else:
+        s2 = s2_
+
     if s1[0] != s2[0]:
         return False
-    # if not torch.equal(s1,s2):
-    #     return False
 
     if s1[0] == -1:
         dir_1 = s1[1:4]
         dir_2 = s2[1:4]
-        if abs(torch.dot(dir_1, dir_2)) >0.8:
+        if abs(torch.dot(dir_1, dir_2)) > 0.8:
             return True
 
     if s1[0] == 1:
@@ -360,10 +368,11 @@ def EqualSymPara(s1, s2):
         dir_2 = s2[1:4]
         p1 = s1[4:7]
         p2 = s2[4:7]
-        if abs(torch.dot(dir_1, dir_2)) >0.8 and torch.dot(dir_1, p2-p1) < 0.1:
+        if abs(torch.dot(dir_1, dir_2)) > 0.8 and torch.dot(dir_1, p2 - p1) < 0.1:
             return True
-    
+
     return False
+
 
 def ValidConnection(v1, v2, adj):
     for i in v1:
