@@ -813,12 +813,17 @@ id_list_C = [1919, 3366, 3521, 3204, 1131, 173, 3749, 2313, 5117, 1920]
 # 2 = LEG
 # 3 = ARM
 
-id_list = id_list_B
+id_list = id_list_C
 
 back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
 leg_index = np.random.choice(id_list)
 arm_index = np.random.choice(id_list)
+
+# back_index = 4474
+# seat_index = 2150
+# leg_index = 4474
+# arm_index = 2150
 
 print(back_index, seat_index, leg_index, arm_index)
 mergeLegs = True
@@ -979,7 +984,6 @@ for i in range(iteration):
                 allLabels_.append(labels_B[index - 10000])
             else:
                 allLabels_.append(labels_A[index])
-
 
         # cosmetic fix, align leg box with seat box
         if mergeLegs:

@@ -344,15 +344,17 @@ class Tree(object):
 
 
 def EqualSymPara(s1, s2):
-    if s1[0] is not s2[0]:
+    if s1[0] != s2[0]:
         return False
-    
+    # if not torch.equal(s1,s2):
+    #     return False
+
     if s1[0] == -1:
         dir_1 = s1[1:4]
         dir_2 = s2[1:4]
         if abs(torch.dot(dir_1, dir_2)) >0.8:
             return True
-    
+
     if s1[0] == 1:
         dir_1 = s1[1:4]
         dir_2 = s2[1:4]
@@ -507,13 +509,13 @@ class TestData(object):
         boxFlag = [-1] * boxNum
         currentFlag = 0
         for i in range(boxNum):
-            symsI = sympara[i]
+            symsI = sympara[i].squeeze()
             if boxFlag[i] != -1:
                 continue
             else:
                 boxFlag[i] = currentFlag
             for j in range(i+1, boxNum):
-                symsJ = sympara[j]
+                symsJ = sympara[j].squeeze()
                 if EqualSymPara(symsI, symsJ):
                     boxFlag[j] = currentFlag
             currentFlag = currentFlag + 1
@@ -548,9 +550,29 @@ class TestData(object):
             treeQueue.append(Tree.Node(left=subQueue[0], sym=sym, nType=2))
             self.setSymForAllKids(subQueue[0], idx)
 
-        self.adjAll = torch.ones(boxNum, boxNum)
-        self.adjAll[0:splitNum, 0:splitNum] = self.adjA[0:splitNum, 0:splitNum]
-        self.adjAll[splitNum:boxNum, splitNum:boxNum] = self.adjB[0:boxNum-splitNum, 0:boxNum-splitNum]
+        if boxNum == 4:
+            self.adjAll = torch.zeros(boxNum, boxNum)
+            # back:0 seat:1 leg:2
+            # back-seat
+            self.adjAll[0,1] = 1
+            self.adjAll[1,0] = 1
+
+            # # Armrest-?
+            # self.adjAll[2,3] = 0
+            # self.adjAll[3,2] = 0
+
+            # leg-seat
+            self.adjAll[3, 1] = 1
+            self.adjAll[1, 3] = 1
+
+            # leg-back
+            self.adjAll[3,0] = 1
+            self.adjAll[0,3] = 1
+        else:
+            self.adjAll = torch.ones(boxNum, boxNum)
+
+        # self.adjAll[0:splitNum, 0:splitNum] = self.adjA[0:splitNum, 0:splitNum]
+        # self.adjAll[splitNum:boxNum, splitNum:boxNum] = self.adjB[0:boxNum-splitNum, 0:boxNum-splitNum]
 
         #self.adjAll[3,4] = 0
         #self.adjAll[4,3] = 0
