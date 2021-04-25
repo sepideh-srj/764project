@@ -74,12 +74,15 @@ def bestDir(dirs, lens, comp):
 # newest version of box rotation
 def rotate_boxes(boxes, syms):
     new_boxes = torch.zeros(boxes.shape)
-
     for k in range(boxes.shape[0]):
         # rotate center vector
         new_boxes[k, 0] = boxes[k, 2]
         new_boxes[k, 1] = boxes[k, 1]
         new_boxes[k, 2] = -boxes[k, 0]
+
+        new_boxes[k, 3] = boxes[k, 3]
+        new_boxes[k, 4] = boxes[k, 4]
+        new_boxes[k, 5] = boxes[k, 5]
 
         # rotate principal directions
         new_boxes[k, 6] = boxes[k, 8]
@@ -89,7 +92,7 @@ def rotate_boxes(boxes, syms):
         new_boxes[k, 9] = boxes[k, 11]
         new_boxes[k, 10] = boxes[k, 10]
         new_boxes[k, 11] = -boxes[k, 9]
-
+        '''
         # re-compute principal directions
         dir_1 = new_boxes[k, 6:9]
         dir_2 = new_boxes[k, 9:]
@@ -109,7 +112,7 @@ def rotate_boxes(boxes, syms):
 
         new_boxes[k, 6:9] = torch.FloatTensor(y_dir)
         new_boxes[k, 9:12] = torch.FloatTensor(z_dir)
-
+        '''
     # rotate syms
     new_syms = torch.zeros(syms.shape)
     for k in range(syms.shape[0]):
@@ -125,6 +128,46 @@ def rotate_boxes(boxes, syms):
 
         new_syms[k, 7] = syms[k, 7]
     return new_boxes, new_syms
+
+# SCORES likes boxes to have dir1 = [0,1,0] and dir2 = [0,0,1]
+# this function attempts to reparametrize the given boxes into those basis vectors
+# however, reflection symmetry becomes a problem, so we don't reparametrize those boxes
+def reparameterize(boxes, syms):
+    new_boxes = []
+    for k in range(len(boxes)):
+        box = boxes[k]
+        sym = syms[k]
+        
+        if abs(sym[0]) > 0.16: # not a reflection symmetry, safe to proceed
+            new_box = torch.zeros(1,12)
+            new_box[0, 0] = box[0, 0]
+            new_box[0, 1] = box[0, 1]
+            new_box[0, 2] = box[0, 2]
+
+            # re-compute principal directions
+            dir_1 = box[0, 6:9]
+            dir_2 = box[0, 9:]
+            dir_1 = dir_1.numpy() / np.linalg.norm(dir_1)
+            dir_2 = dir_2.numpy() / np.linalg.norm(dir_2)
+            dir_3 = np.cross(dir_1, dir_2)
+            dir_3 = dir_3 / np.linalg.norm(dir_3)
+
+            # realign axes
+            x_dir, x_len = bestDir([dir_1, dir_2, dir_3], box[0, 3:6], 0)
+            y_dir, y_len = bestDir([dir_1, dir_2, dir_3], box[0, 3:6], 1)
+            z_dir, z_len = bestDir([dir_1, dir_2, dir_3], box[0, 3:6], 2)
+
+            new_box[0, 3] = y_len
+            new_box[0, 4] = z_len
+            new_box[0, 5] = x_len
+
+            new_box[0, 6:9] = torch.FloatTensor(y_dir)
+            new_box[0, 9:12] = torch.FloatTensor(z_dir)
+        else:
+            new_box = box
+
+        new_boxes.append(new_box)
+    return new_boxes
 
 def rotate_boxes_only(boxes_list):
     boxes = torch.zeros(len(boxes_list),12)

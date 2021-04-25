@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from torch.utils import data
 from scipy.io import loadmat, savemat
 from enum import Enum
-from grassdata import GRASSDataset, Tree, unrotate_boxes, rotate_boxes_only
+from grassdata import GRASSDataset, Tree, unrotate_boxes, rotate_boxes_only, reparameterize
 from dataset import SCORESTest
 import draw3dOBB
 import testVQContext
@@ -26,6 +26,19 @@ def findMaxY(box):
         if corners[i,1] > yMax:
             yMax = corners[i,1]
     return yMax
+
+def snapToGrid(box):
+    new_box = torch.zeros(1,12)
+    for i in range(6):
+        new_box[0,i] = box[0,i]
+    for i in range(6,12):
+        if abs(box[0,i]-1) < 0.2:
+            new_box[0,i] = 1
+        elif abs(box[0,i]) < 0.2:
+            new_box[0,i] = 0
+        else:
+            new_box[0,i] = box[0,i]
+    return new_box
 
 def findMinY(box):
     corners = computeCorners(box)
@@ -49,7 +62,7 @@ def computeTransformMatrix(gtbox, predbox):
     preddir_2 = predbox[9:12]
     preddir_1 = preddir_1/LA.norm(preddir_1)
     preddir_2 = preddir_2/LA.norm(preddir_2)
-    preddir_3 = -np.cross(preddir_1, preddir_2)
+    preddir_3 = np.cross(preddir_1, preddir_2)
     #preddir_3 = -np.cross(preddir_1, preddir_2)
     # preddir_3 = preddir_3/LA.norm(preddir_3)
 
@@ -424,7 +437,7 @@ def decode_structure(root):
         node = stack.pop()
         # label_prob = model.nodeClassifier(f)
         # _, label = torch.max(label_prob, 1)
-        # label = node.label.item()
+        label = node.label
         node_type = torch.LongTensor([node.node_type.value]).item()
         if node_type == 1:  # ADJ
             # left, right = model.adjDecoder(f)
@@ -504,11 +517,11 @@ def decode_structure(root):
                 newcenter = ref_normal.mul(2 * abs(torch.sum(ref_point.add(-center).mul(ref_normal)))).add(center)
                 if ref_normal.matmul(dir1) < 0:
                     ref_normal = -ref_normal
-                dir1 = dir1.add(ref_normal.mul(-2 * ref_normal.matmul(dir1)))
+                new_dir1 = dir1.add(ref_normal.mul(-2 * ref_normal.matmul(dir1)))
                 if ref_normal.matmul(dir2) < 0:
                     ref_normal = -ref_normal
-                dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
-                newbox = torch.cat([newcenter, dir0, dir1, dir2])
+                new_dir2 = dir2.add(ref_normal.mul(-2 * ref_normal.matmul(dir2)))
+                newbox = torch.cat([newcenter, dir0, new_dir1, new_dir2])
                 reBoxes.append(newbox)
                 recopyBoxes.append(reBox)
                 reObjs.append(reObj)
@@ -819,6 +832,7 @@ dir_obj = 'data/PartNet_Chairs/Chair_parts'
 # sample back
 new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=back_index)[0]
 boxes, syms, labels, objs = decode_boxes(new_tree.root)
+boxes = reparameterize(boxes, syms)
 if mergeBack:
     allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
     all_boxesA, all_labelsA = decode_structure_with_labels(new_tree.root)
@@ -831,7 +845,7 @@ if mergeBack:
     backCopyBoxes = [allcopyBoxes2[i] for i in backIds] # unrotated
     backObjs = [allobjs2[i] for i in backIds]
     saveOBJ(backObjs, 'backObj.OBJ', renderBoxes2mesh(unrotatedBackBoxes,backCopyBoxes,backObjs))
-    
+
     backBox = mergeBoxes(backBoxes)
     boxes_A = [backBox]
     syms_A = [torch.ones(8)*10]
@@ -847,6 +861,7 @@ else:
 # sample seat
 new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=seat_index)[0]
 boxes, syms, labels, objs = decode_boxes(new_tree.root)
+boxes = reparameterize(boxes, syms)
 ids = [i for i in range(len(labels)) if labels[i] == 1]
 boxes_A.extend([boxes[i] for i in ids])
 syms_A.extend([syms[i] for i in ids])
@@ -857,6 +872,7 @@ objs_A.extend([objs[i] for i in ids])
 if include_arms:
     new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=arm_index)[0]
     boxes, syms, labels, objs = decode_boxes(new_tree.root)
+    boxes = reparameterize(boxes, syms)
     ids = [i for i in range(len(labels)) if labels[i] == 3] 
     boxes_B = [boxes[i] for i in ids]
     syms_B = [syms[i] for i in ids]
@@ -871,6 +887,7 @@ else:
 # sample legs
 new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=leg_index)[0]
 boxes, syms, labels, objs = decode_boxes(new_tree.root)
+boxes = reparameterize(boxes, syms)
 if mergeLegs:
     allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
     all_boxesB, all_labelsB = decode_structure_with_labels(new_tree.root)
@@ -963,15 +980,23 @@ for i in range(iteration):
 
     # cosmetic fix, align leg box with seat box
     if mergeLegs:
-        leg_boxes = [boxes_[i] for i in range(len(boxes_)) if allLabels_[i] == 2]
-        seat_boxes = [boxes_[i] for i in range(len(boxes_)) if allLabels_[i] == 1]
+        leg_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 2]
+        seat_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 1]
+        leg_boxes = [boxes_[i] for i in leg_idxs]
+        seat_boxes = [boxes_[i] for i in seat_idxs]
         if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
+            leg_idx = leg_idxs[0]
+            seat_idx = seat_idxs[0]
             leg_box = leg_boxes[0]
             seat_box = seat_boxes[0]
+            seat_box = snapToGrid(seat_box)
+            leg_box = snapToGrid(leg_box)
             y_max_legs = findMaxY(leg_box)
             y_min_seat = findMinY(seat_box)
             y_max_seat = findMaxY(seat_box)
             leg_box[0,1] = leg_box[0,1] - y_max_legs + y_min_seat + 0.4*(y_max_seat - y_min_seat)
+            boxes_[leg_idx] = leg_box
+            boxes_[seat_idx] = seat_box
 
     output_boxes = unrotate_boxes(boxes_)
     
