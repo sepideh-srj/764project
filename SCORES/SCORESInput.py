@@ -737,10 +737,10 @@ def reshuffle(boxes, syms, labels, objs):
     return new_boxes, new_syms, new_labels, new_objs
 
 def computeCorners(box):
-    center = box[0,0:3]
-    lengths = box[0,3:6]
-    dir_1 = box[0,6:9]
-    dir_2 = box[0,9:]
+    center = box[0,0:3].numpy()
+    lengths = box[0,3:6].numpy()
+    dir_1 = box[0,6:9].numpy()
+    dir_2 = box[0,9:].numpy()
 
     dir_1 = dir_1 / LA.norm(dir_1)
     dir_2 = dir_2 / LA.norm(dir_2)
@@ -815,9 +815,9 @@ id_list_C = [1919, 3366, 3521, 3204, 1131, 173, 3749, 2313, 5117, 1920]
 
 id_list = id_list_B
 
-back_index = 3492 #np.random.choice(id_list)
+back_index = np.random.choice(id_list)
 seat_index = np.random.choice(id_list)
-leg_index = np.random.choice(id_list) #173
+leg_index = np.random.choice(id_list)
 arm_index = np.random.choice(id_list)
 
 print(back_index, seat_index, leg_index, arm_index)
@@ -844,7 +844,7 @@ if mergeBack:
     unrotatedBackBoxes = [allnewboxes2[i] for i in backIds] # unrotated
     backCopyBoxes = [allcopyBoxes2[i] for i in backIds] # unrotated
     backObjs = [allobjs2[i] for i in backIds]
-    saveOBJ(backObjs, 'backObj.OBJ', renderBoxes2mesh(unrotatedBackBoxes,backCopyBoxes,backObjs))
+    saveOBJ(backObjs, 'backObj.obj', renderBoxes2mesh(unrotatedBackBoxes,backCopyBoxes,backObjs))
 
     backBox = mergeBoxes(backBoxes)
     boxes_A = [backBox]
@@ -899,7 +899,7 @@ if mergeLegs:
     unrotatedLegBoxes = [allnewboxes2[i] for i in legIds] # unrotated
     legCopyBoxes = [allcopyBoxes2[i] for i in legIds] # unrotated
     legObjs = [allobjs2[i] for i in legIds]
-    saveOBJ(legObjs, 'legObj.OBJ', renderBoxes2mesh(unrotatedLegBoxes,legCopyBoxes,legObjs))
+    saveOBJ(legObjs, 'legObj.obj', renderBoxes2mesh(unrotatedLegBoxes,legCopyBoxes,legObjs))
     
     legBox = mergeBoxes(legBoxes)
     boxes_B.append(legBox)
@@ -940,9 +940,9 @@ for index in idxs:
     else:
         allObjs.append(objs_A[index])
 
-#saveOBJ(allObjs,'sampled_before.OBJ' , renderBoxes2mesh(input_boxes,copyBoxes,allObjs))
+saveOBJ(allObjs,'sampled_before.obj' , renderBoxes2mesh_new(input_boxes,copyBoxes,allObjs))
 
-mergeNetFix = torch.load('SCORES/MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
+mergeNetFix = torch.load('MergeNet_chair_demo_fix.pkl', map_location=lambda storage, loc: storage.cpu())
 mergeNetFix = mergeNetFix.cpu()
 
 # allBoxes = testVQContext.iterateKMergeTest(mergeNetFix, testFile)
@@ -956,51 +956,53 @@ for i in range(iteration):
             node.sym[0] = np.sign(node.sym[0])
     boxes_, _, _, idxs_ = testVQContext.render_node_to_boxes(originalNodes)
 
-    allObjs_ = []
-    for index in idxs_:
-        index = int(index.item())
-        if index >= 10000:
-            allObjs_.append(objs_B[index - 10000])
-        else:
-            allObjs_.append(objs_A[index])
-
-    copyBoxes_ = []
-    for index in idxs_:
-        index = int(index.item())
-        index_loc = idxs.index(index)
-        copyBoxes_.append(copyBoxes[index_loc])
-
-    allLabels_ = []
-    for index in idxs_:
-        index = int(index.item())
-        if index >= 10000:
-            allLabels_.append(labels_B[index - 10000])
-        else:
-            allLabels_.append(labels_A[index])
-
-    # cosmetic fix, align leg box with seat box
-    if mergeLegs:
-        leg_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 2]
-        seat_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 1]
-        leg_boxes = [boxes_[i] for i in leg_idxs]
-        seat_boxes = [boxes_[i] for i in seat_idxs]
-        if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
-            leg_idx = leg_idxs[0]
-            seat_idx = seat_idxs[0]
-            leg_box = leg_boxes[0]
-            seat_box = seat_boxes[0]
-            seat_box = snapToGrid(seat_box)
-            leg_box = snapToGrid(leg_box)
-            y_max_legs = findMaxY(leg_box)
-            y_min_seat = findMinY(seat_box)
-            y_max_seat = findMaxY(seat_box)
-            leg_box[0,1] = leg_box[0,1] - y_max_legs + y_min_seat + 0.4*(y_max_seat - y_min_seat)
-            boxes_[leg_idx] = leg_box
-            boxes_[seat_idx] = seat_box
-
-    output_boxes = unrotate_boxes(boxes_)
     
     if i == iteration-1:
+        allObjs_ = []
+        for index in idxs_:
+            index = int(index.item())
+            if index >= 10000:
+                allObjs_.append(objs_B[index - 10000])
+            else:
+                allObjs_.append(objs_A[index])
+
+        copyBoxes_ = []
+        for index in idxs_:
+            index = int(index.item())
+            index_loc = idxs.index(index)
+            copyBoxes_.append(copyBoxes[index_loc])
+
+        allLabels_ = []
+        for index in idxs_:
+            index = int(index.item())
+            if index >= 10000:
+                allLabels_.append(labels_B[index - 10000])
+            else:
+                allLabels_.append(labels_A[index])
+
+
+        # cosmetic fix, align leg box with seat box
+        if mergeLegs:
+            leg_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 2]
+            seat_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 1]
+            leg_boxes = [boxes_[i] for i in leg_idxs]
+            seat_boxes = [boxes_[i] for i in seat_idxs]
+            if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
+                leg_idx = leg_idxs[0]
+                seat_idx = seat_idxs[0]
+                leg_box = leg_boxes[0]
+                seat_box = seat_boxes[0]
+                seat_box = snapToGrid(seat_box)
+                leg_box = snapToGrid(leg_box)
+                y_max_legs = findMaxY(leg_box)
+                y_min_seat = findMinY(seat_box)
+                y_max_seat = findMaxY(seat_box)
+                leg_box[0, 1] = leg_box[0, 1] - y_max_legs + y_min_seat + 0.4 * (y_max_seat - y_min_seat)
+                boxes_[leg_idx] = leg_box
+                boxes_[seat_idx] = seat_box
+
+        output_boxes = unrotate_boxes(boxes_)
+
         showGenshape(output_boxes)
         # alignBoxAndRender(copyBoxes, output_boxes, gtTypeBoxes, allobjs, 'sampled_after_{}.OBJ'.format(i))
         print(len(allObjs_),len(allObjs_),len(copyBoxes_))
