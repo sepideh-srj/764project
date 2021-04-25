@@ -352,10 +352,10 @@ def render_node_to_boxes(nodes):
     return boxes, copyBoxes, gtTypeBoxes, idxs
 
 def oneIterMerge(model, testdata):
-    if len(testdata.leves) < 4:    
-        patches = testdata.sampleKsubstructure(len(testdata.leves)-1)
-    else:
-        patches = testdata.sampleKsubstructure(4)
+    # if len(testdata.leves) < 4:
+    #     patches = testdata.sampleKsubstructure(len(testdata.leves)-1)
+    # else:
+    patches = testdata.sampleKsubstructure(2)
     vqSum = 0
     count = 0
     for tree in patches:
