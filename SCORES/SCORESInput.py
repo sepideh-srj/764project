@@ -16,6 +16,7 @@ import testVQContext
 import testVQContextGen
 import torch.utils.data
 import math
+import copy
 
 ## Some function definitions for box decoding
 
@@ -134,6 +135,8 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
                 file_path = 'legObj.obj'
             elif name == 'BACK_OBJ':
                 file_path = 'backObj.obj'
+            elif name == 'ARM_OBJ':
+                file_path = 'armObj.obj'
             else:    
                 file_path = os.path.join('data/PartNet_Chairs/Chair_parts/', name)
             with open(file_path, 'r') as f:
@@ -824,6 +827,7 @@ print(back_index, seat_index, leg_index, arm_index)
 mergeLegs = True
 mergeBack = True
 include_arms = False
+attach_arms = True
 
 # load data from database
 dir_syms = 'data/Chair'
@@ -964,52 +968,98 @@ for i in range(iteration):
             node.sym[0] = np.sign(node.sym[0])
     boxes_, _, _, idxs_ = testVQContext.render_node_to_boxes(originalNodes)
 
-    
+    allObjs_ = []
+    for index in idxs_:
+        index = int(index.item())
+        if index >= 10000:
+            allObjs_.append(objs_B[index - 10000])
+        else:
+            allObjs_.append(objs_A[index])
+
+    copyBoxes_ = []
+    for index in idxs_:
+        index = int(index.item())
+        index_loc = idxs.index(index)
+        copyBoxes_.append(copyBoxes[index_loc])
+
+    allLabels_ = []
+    for index in idxs_:
+        index = int(index.item())
+        if index >= 10000:
+            allLabels_.append(labels_B[index - 10000])
+        else:
+            allLabels_.append(labels_A[index])
+
+
+    # cosmetic fix, align leg box with seat box
+    if mergeLegs:
+        leg_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 2]
+        seat_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 1]
+        leg_boxes = [boxes_[i] for i in leg_idxs]
+        seat_boxes = [boxes_[i] for i in seat_idxs]
+        if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
+            leg_idx = leg_idxs[0]
+            seat_idx = seat_idxs[0]
+            leg_box = leg_boxes[0]
+            seat_box = seat_boxes[0]
+            seat_box = snapToGrid(seat_box)
+            leg_box = snapToGrid(leg_box)
+            y_max_legs = findMaxY(leg_box)
+            y_min_seat = findMinY(seat_box)
+            y_max_seat = findMaxY(seat_box)
+            leg_box[0, 1] = leg_box[0, 1] - y_max_legs + y_min_seat + 0.4 * (y_max_seat - y_min_seat)
+            boxes_[leg_idx] = leg_box
+            boxes_[seat_idx] = seat_box
+
+        #output_boxes = unrotate_boxes(boxes_)
+        #showGenshape(output_boxes)
+
     if i == iteration-1:
-        allObjs_ = []
-        for index in idxs_:
-            index = int(index.item())
-            if index >= 10000:
-                allObjs_.append(objs_B[index - 10000])
-            else:
-                allObjs_.append(objs_A[index])
+        output_boxes = unrotate_boxes(boxes_)
 
-        copyBoxes_ = []
-        for index in idxs_:
-            index = int(index.item())
-            index_loc = idxs.index(index)
-            copyBoxes_.append(copyBoxes[index_loc])
+        if attach_arms:
+            # sample arms
+            new_tree = GRASSDataset(dir_syms,dir_obj,models_num=10, index=arm_index)[0]
+            boxes, syms, labels, objs = decode_boxes(new_tree.root)
+            boxes = reparameterize(boxes, syms)
+            allnewboxes2, allcopyBoxes2, allobjs2 = decode_structure(new_tree.root)
+            all_boxesB, all_labelsB = decode_structure_with_labels(new_tree.root)
+            allnewboxes2 = unrotate_boxes(allnewboxes2)
+            allcopyBoxes2 = unrotate_boxes(allcopyBoxes2)
 
-        allLabels_ = []
-        for index in idxs_:
-            index = int(index.item())
-            if index >= 10000:
-                allLabels_.append(labels_B[index - 10000])
-            else:
-                allLabels_.append(labels_A[index])
+            armIds = [i for i in range(len(all_labelsB)) if all_labelsB[i] == 3]
+            armBoxes = [all_boxesB[i] for i in armIds] # rotated
+            unrotatedArmBoxes = [allnewboxes2[i] for i in armIds] # unrotated
+            armCopyBoxes = [allcopyBoxes2[i] for i in armIds] # unrotated
+            armObjs = [allobjs2[i] for i in armIds]
+            saveOBJ(armObjs, 'armObj.obj', renderBoxes2mesh(unrotatedArmBoxes,armCopyBoxes,armObjs))
 
-
-        # cosmetic fix, align leg box with seat box
-        if mergeLegs:
-            leg_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 2]
-            seat_idxs = [i for i in range(len(boxes_)) if allLabels_[i] == 1]
-            leg_boxes = [boxes_[i] for i in leg_idxs]
-            seat_boxes = [boxes_[i] for i in seat_idxs]
-            if (len(leg_boxes) == 1) and (len(seat_boxes) == 1):
-                leg_idx = leg_idxs[0]
+            arm_box = mergeBoxes(armBoxes)
+            old_arm_box = copy.deepcopy(arm_box)
+            seat_idxs = [i for i in range(len(output_boxes)) if allLabels_[i] == 1]
+            back_idxs = [i for i in range(len(output_boxes)) if allLabels_[i] == 0]
+            seat_boxes = [output_boxes[i] for i in seat_idxs]
+            back_boxes = [output_boxes[i] for i in back_idxs]
+            back_box = back_boxes[0]
+            if len(seat_boxes) == 1:
                 seat_idx = seat_idxs[0]
-                leg_box = leg_boxes[0]
                 seat_box = seat_boxes[0]
                 seat_box = snapToGrid(seat_box)
-                leg_box = snapToGrid(leg_box)
-                y_max_legs = findMaxY(leg_box)
+                output_boxes[seat_idx] = seat_box
+                arm_box[0,0] = seat_box[0,0]
+                arm_box[0,2] = seat_box[0,2]
+                arm_box[0,3] = 0.5*back_box[0,3]
+                arm_box[0,4] = seat_box[0,4]
+                arm_box[0,5] = seat_box[0,5]
+
                 y_min_seat = findMinY(seat_box)
                 y_max_seat = findMaxY(seat_box)
-                leg_box[0, 1] = leg_box[0, 1] - y_max_legs + y_min_seat + 0.4 * (y_max_seat - y_min_seat)
-                boxes_[leg_idx] = leg_box
-                boxes_[seat_idx] = seat_box
-
-        output_boxes = unrotate_boxes(boxes_)
+                y_min_arm = findMinY(arm_box)
+                arm_box[0,1] = arm_box[0,1] - y_min_arm + y_max_seat - 0.4 * (y_max_seat - y_min_seat)
+                
+                output_boxes.append(arm_box)
+                copyBoxes_.append(old_arm_box)
+                allObjs_.append(['ARM_OBJ'])
 
         showGenshape(output_boxes)
         # alignBoxAndRender(copyBoxes, output_boxes, gtTypeBoxes, allobjs, 'sampled_after_{}.OBJ'.format(i))
