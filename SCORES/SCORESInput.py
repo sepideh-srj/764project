@@ -105,7 +105,7 @@ def renderBoxes2mesh(boxes, gtboxs, obj_names,flag=1):
             predCenter = predbox[0:3][np.newaxis, ...].T
 
             M = computeTransformMatrix(gtbox, predbox,flag)
-            
+
             x = np.array(vertices).T
             y = x - gtCenter
             y = np.matmul(M, y)
@@ -137,7 +137,7 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
                 file_path = 'backObj.obj'
             elif name == 'ARM_OBJ':
                 file_path = 'armObj.obj'
-            else:    
+            else:
                 file_path = os.path.join('data/PartNet_Chairs/Chair_parts/', name)
             with open(file_path, 'r') as f:
                 lines = f.readlines()
@@ -160,7 +160,7 @@ def renderBoxes2mesh_new(boxes, gtboxs, obj_names):
         predCenter = predbox[0:3][np.newaxis, ...].T
 
         M = computeTransformMatrix(gtbox, predbox)
-        
+
         x = np.array(vertices).T
         y = x - gtCenter
         y = np.matmul(M, y)
@@ -816,18 +816,45 @@ id_list_C = [1919, 3366, 3521, 3204, 1131, 173, 3749, 2313, 5117, 1920]
 # 2 = LEG
 # 3 = ARM
 
-id_list = id_list_A
+id_list = id_list_B
 
-for run in range(10):
+id_list_back = id_list.copy()
+id_list_seat = id_list.copy()
+id_list_leg = id_list.copy()
+id_list_arm = id_list.copy()
+
+
+
+## - Activate For Demo
+if id_list == id_list_C:
+    id_list_back.remove(5117)
+    id_list_seat.remove(1919)
+    id_list_seat.remove(3749)
+    id_list_seat.remove(1131)
+    id_list_seat.remove(5117)
+    id_list_seat.remove(2313)
+    id_list_leg.remove(1919)
+    id_list_leg.remove(3521)
+    id_list_leg.remove(1131)
+    id_list_leg.remove(3749)
+    id_list_leg.remove(2313)
+    id_list_leg.remove(5117)
+    id_list_arm.remove(3521)
+    id_list_arm.remove(1919)
+elif id_list == id_list_B:
+    id_list_arm.remove(2160)
+    id_list_arm.remove(3492)
+    id_list_leg.remove(2160)
+elif id_list == id_list_C:
+    id_list_leg.remove(369)
+
+
+for run in range(5):
     back_index = np.random.choice(id_list)
     seat_index = np.random.choice(id_list)
     leg_index = np.random.choice(id_list)
     arm_index = np.random.choice(id_list)
 
-    # back_index = 4474
-    # seat_index = 2150
-    # leg_index = 4474
-    # arm_index = 2150
 
     print(back_index, seat_index, leg_index, arm_index)
     mergeLegs = True

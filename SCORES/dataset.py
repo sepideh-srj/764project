@@ -578,13 +578,13 @@ class TestData(object):
             self.adjAll[3,0] = 1
             self.adjAll[0,3] = 1
         else:
-            self.adjAll = torch.zeros(boxNum, boxNum)
-            # back-seat
-            self.adjAll[0, 1] = 1
-            self.adjAll[1, 0] = 1
-            # leg-seat
-            self.adjAll[2, 1] = 1
-            self.adjAll[1, 2] = 1
+            self.adjAll = torch.ones(boxNum, boxNum)
+            # # back-seat
+            # self.adjAll[0, 1] = 1
+            # self.adjAll[1, 0] = 1
+            # # leg-seat
+            # self.adjAll[2, 1] = 1
+            # self.adjAll[1, 2] = 1
 
 
         # self.adjAll[0:splitNum, 0:splitNum] = self.adjA[0:splitNum, 0:splitNum]
