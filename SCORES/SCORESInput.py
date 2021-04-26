@@ -823,32 +823,6 @@ id_list_seat = id_list.copy()
 id_list_leg = id_list.copy()
 id_list_arm = id_list.copy()
 
-
-
-## - Activate For Demo
-if id_list == id_list_C:
-    id_list_back.remove(5117)
-    id_list_seat.remove(1919)
-    id_list_seat.remove(3749)
-    id_list_seat.remove(1131)
-    id_list_seat.remove(5117)
-    id_list_seat.remove(2313)
-    id_list_leg.remove(1919)
-    id_list_leg.remove(3521)
-    id_list_leg.remove(1131)
-    id_list_leg.remove(3749)
-    id_list_leg.remove(2313)
-    id_list_leg.remove(5117)
-    id_list_arm.remove(3521)
-    id_list_arm.remove(1919)
-elif id_list == id_list_B:
-    id_list_arm.remove(2160)
-    id_list_arm.remove(3492)
-    id_list_leg.remove(2160)
-elif id_list == id_list_C:
-    id_list_leg.remove(369)
-
-
 for run in range(5):
     back_index = np.random.choice(id_list)
     seat_index = np.random.choice(id_list)
