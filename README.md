@@ -2,6 +2,7 @@
 This is a Pytorch implementation of our mix and match project. 
 Parts from different chairs are selected randomly, merged and given as input to the SCORES network.
 SCORES is a recursive neural network (RvNN).
+Baseline of our project is as follows:
 ![alt text](https://github.com/sepideh-srj/764project/blob/main/cg.jpg)
 
 ### pre-process
