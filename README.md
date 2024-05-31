@@ -1,5 +1,6 @@
 # Mix and Match 
-This is a Pytorch implementation of our mix and match project. 
+## Description 
+This is a Pytorch implementation of automated mix-and-match part assembly-based 3D modeling. 
 Parts from different chairs are selected randomly, merged and given as input to the SCORES network.
 SCORES is a recursive neural network (RvNN).
 Baseline of our project is as follows:
@@ -14,8 +15,6 @@ Transformed parts may have small misalignments at connection points, to make the
 ## Usage
 This implementation should be run with Python 3.x and Pytorch 0.4.0.
 
-
-## Description
 
 ## Reference
 ```
